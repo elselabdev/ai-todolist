@@ -11,6 +11,7 @@ import { InlineEdit } from "@/components/ui/inline-edit"
 import { SubtaskInput } from "@/components/ui/subtask-input"
 import { TaskContextMenu } from "@/components/ui/task-context-menu"
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd"
+import { ConfirmModal } from "@/components/ui/confirm-modal"
 
 interface SubTask {
   id: string
@@ -53,6 +54,10 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
   const router = useRouter()
   const [liveTimers, setLiveTimers] = useState<{ [taskId: string]: number }>({})
   const [timerInterval, setTimerInterval] = useState<NodeJS.Timeout | null>(null)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [deleteTaskModalOpen, setDeleteTaskModalOpen] = useState(false)
+  const [deleteSubtaskModalOpen, setDeleteSubtaskModalOpen] = useState(false)
+  const [selectedTaskForDelete, setSelectedTaskForDelete] = useState<{ taskId: string, subtaskId?: string } | null>(null)
 
   useEffect(() => {
     const fetchProject = async () => {
@@ -173,10 +178,6 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
   }
 
   const handleDeleteProject = async () => {
-    if (!confirm("Are you sure you want to delete this project? This action cannot be undone.")) {
-      return
-    }
-
     setIsDeleting(true)
 
     try {
@@ -279,6 +280,11 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
       // Update the task in the local state
       const updatedTasks = project.tasks.map((task) => {
         if (task.id === taskId) {
+          // Remove from live timers
+          const newLiveTimers = { ...liveTimers }
+          delete newLiveTimers[taskId]
+          setLiveTimers(newLiveTimers)
+
           return {
             ...task,
             timeTrackingStarted: null,
@@ -288,11 +294,11 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
         return task
       })
 
-      setProject({
-        ...project,
+      setProject((prev) => prev ? {
+        ...prev,
         tasks: updatedTasks,
-        timeSpent: (project.timeSpent || 0) + data.sessionTime,
-      })
+        timeSpent: (prev.timeSpent || 0) + data.sessionTime,
+      } : null)
     } catch (error) {
       console.error("Error stopping time tracking:", error)
     } finally {
@@ -468,10 +474,20 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
   }
 
   const handleDeleteTask = async (taskId: string) => {
-    if (!project) return
+    setSelectedTaskForDelete({ taskId })
+    setDeleteTaskModalOpen(true)
+  }
+
+  const handleDeleteSubtask = async (taskId: string, subtaskId: string) => {
+    setSelectedTaskForDelete({ taskId, subtaskId })
+    setDeleteSubtaskModalOpen(true)
+  }
+
+  const confirmDeleteTask = async () => {
+    if (!selectedTaskForDelete?.taskId) return
 
     try {
-      const response = await fetch(`/api/projects/${id}/tasks/${taskId}`, {
+      const response = await fetch(`/api/projects/${id}/tasks/${selectedTaskForDelete.taskId}`, {
         method: "DELETE",
       })
 
@@ -481,21 +497,21 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
 
       setProject((prev) => prev ? {
         ...prev,
-        tasks: prev.tasks.filter((task) => task.id !== taskId),
+        tasks: prev.tasks.filter((task) => task.id !== selectedTaskForDelete.taskId),
       } : null)
     } catch (error) {
       console.error("Error deleting task:", error)
-      throw error
     }
   }
 
-  const handleDeleteSubtask = async (taskId: string, subtaskId: string) => {
-    if (!project) return
+  const confirmDeleteSubtask = async () => {
+    if (!selectedTaskForDelete?.taskId || !selectedTaskForDelete?.subtaskId) return
 
     try {
-      const response = await fetch(`/api/projects/${id}/tasks/${taskId}/subtasks/${subtaskId}`, {
-        method: "DELETE",
-      })
+      const response = await fetch(
+        `/api/projects/${id}/tasks/${selectedTaskForDelete.taskId}/subtasks/${selectedTaskForDelete.subtaskId}`,
+        { method: "DELETE" }
+      )
 
       if (!response.ok) {
         throw new Error("Failed to delete subtask")
@@ -504,15 +520,16 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
       setProject((prev) => prev ? {
         ...prev,
         tasks: prev.tasks.map((task) =>
-          task.id === taskId ? {
-            ...task,
-            subtasks: task.subtasks.filter((st) => st.id !== subtaskId),
-          } : task
+          task.id === selectedTaskForDelete.taskId
+            ? {
+                ...task,
+                subtasks: task.subtasks.filter((st) => st.id !== selectedTaskForDelete.subtaskId),
+              }
+            : task
         ),
       } : null)
     } catch (error) {
       console.error("Error deleting subtask:", error)
-      throw error
     }
   }
 
@@ -653,7 +670,7 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
         <CustomButton
           variant="danger"
           icon={<Trash2 className="h-5 w-5" />}
-          onClick={handleDeleteProject}
+          onClick={() => setDeleteModalOpen(true)}
           disabled={isDeleting}
         >
           {isDeleting ? "Deleting..." : "Delete Project"}
@@ -754,7 +771,7 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
                                         <span>
                                           {task.timeTrackingStarted
                                             ? formatTimeSpent(liveTimers[task.id] || 0)
-                                            : formatTimeSpent(Math.floor((task.timeSpent || 0) / 60))}
+                                            : formatTimeSpent(Math.floor(task.timeSpent || 0))}
                                         </span>
                                       </div>
                                     )}
@@ -877,6 +894,36 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
         initialData={selectedTask || undefined}
         mode={selectedTask ? "edit" : "add"}
         isLoading={isTaskLoading}
+      />
+
+      <ConfirmModal
+        isOpen={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={handleDeleteProject}
+        title="Delete Project"
+        description="Are you sure you want to delete this project? This action cannot be undone and will delete all tasks and subtasks."
+        confirmText="Delete Project"
+        variant="danger"
+      />
+
+      <ConfirmModal
+        isOpen={deleteTaskModalOpen}
+        onClose={() => setDeleteTaskModalOpen(false)}
+        onConfirm={confirmDeleteTask}
+        title="Delete Task"
+        description="Are you sure you want to delete this task? This will also delete all its subtasks."
+        confirmText="Delete Task"
+        variant="danger"
+      />
+
+      <ConfirmModal
+        isOpen={deleteSubtaskModalOpen}
+        onClose={() => setDeleteSubtaskModalOpen(false)}
+        onConfirm={confirmDeleteSubtask}
+        title="Delete Subtask"
+        description="Are you sure you want to delete this subtask?"
+        confirmText="Delete Subtask"
+        variant="danger"
       />
     </div>
   )

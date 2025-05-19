@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Home, Plus, Settings, Layout, FileText } from "lucide-react"
+import { Home, Plus, Settings, FileText, History } from "lucide-react"
 
 export function MainNav() {
   return (
@@ -24,6 +24,13 @@ export function MainNav() {
       >
         <Plus className="h-4 w-4" />
         New Project
+      </Link>
+      <Link
+        href="/version-history"
+        className="text-sm font-medium transition-colors hover:text-primary flex items-center gap-2"
+      >
+        <History className="h-4 w-4" />
+        Version History
       </Link>
       <Link
         href="/settings"
