@@ -5,7 +5,10 @@ import { useRouter } from "next/navigation"
 import { CustomButton } from "@/components/ui/custom-button"
 import { CustomCard, CustomCardHeader, CustomCardTitle, CustomCardDescription } from "@/components/ui/custom-card"
 import { CustomProgress } from "@/components/ui/custom-progress"
-import { Loader2, ArrowLeft, Trash2, CheckCircle, Circle, Play, Pause, Clock } from "lucide-react"
+import { Loader2, ArrowLeft, Trash2, CheckCircle, Circle, Play, Pause, Clock, Plus, Edit2 } from "lucide-react"
+import { TaskDialog } from "@/components/ui/task-dialog"
+import { InlineEdit } from "@/components/ui/inline-edit"
+import { SubtaskInput } from "@/components/ui/subtask-input"
 
 interface SubTask {
   id: string
@@ -16,6 +19,7 @@ interface SubTask {
 interface Task {
   id: string
   task: string
+  description?: string
   subtasks: SubTask[]
   completed: boolean
   timeSpent?: number
@@ -40,6 +44,9 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
   const [error, setError] = useState("")
   const [isDeleting, setIsDeleting] = useState(false)
   const [timeTrackingLoading, setTimeTrackingLoading] = useState<string | null>(null)
+  const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false)
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null)
+  const [isTaskLoading, setIsTaskLoading] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -282,6 +289,173 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
     }
   }
 
+  const handleAddTask = async (data: { task: string; description?: string }) => {
+    setIsTaskLoading(true)
+    try {
+      const response = await fetch(`/api/projects/${id}/tasks`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to add task")
+      }
+
+      const newTask = await response.json()
+      setProject((prev) => prev ? {
+        ...prev,
+        tasks: [...prev.tasks, newTask.task],
+      } : null)
+    } catch (error) {
+      console.error("Error adding task:", error)
+      throw error
+    } finally {
+      setIsTaskLoading(false)
+    }
+  }
+
+  const handleTaskInlineEdit = async (taskId: string, newTask: string) => {
+    if (!project) return
+
+    try {
+      const response = await fetch(`/api/projects/${id}/tasks/${taskId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          task: newTask,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to update task")
+      }
+
+      const updatedTask = await response.json()
+      setProject((prev) => prev ? {
+        ...prev,
+        tasks: prev.tasks.map((task) =>
+          task.id === taskId ? { ...task, ...updatedTask.task } : task
+        ),
+      } : null)
+    } catch (error) {
+      console.error("Error updating task:", error)
+      throw error
+    }
+  }
+
+  const handleTaskDialogEdit = async (data: { task: string; description?: string }) => {
+    if (!selectedTask) return
+
+    setIsTaskLoading(true)
+    try {
+      const response = await fetch(`/api/projects/${id}/tasks/${selectedTask.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to update task")
+      }
+
+      const updatedTask = await response.json()
+      setProject((prev) => prev ? {
+        ...prev,
+        tasks: prev.tasks.map((task) =>
+          task.id === selectedTask.id ? { ...task, ...updatedTask.task } : task
+        ),
+      } : null)
+    } catch (error) {
+      console.error("Error updating task:", error)
+      throw error
+    } finally {
+      setIsTaskLoading(false)
+    }
+  }
+
+  const handleSubtaskEdit = async (taskId: string, subtaskId: string, newTask: string) => {
+    if (!project) return
+
+    try {
+      const response = await fetch(`/api/projects/${id}/tasks/${taskId}/subtasks`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          subtaskId,
+          task: newTask,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to update subtask")
+      }
+
+      const { subtask } = await response.json()
+      setProject((prev) => prev ? {
+        ...prev,
+        tasks: prev.tasks.map((task) =>
+          task.id === taskId ? {
+            ...task,
+            subtasks: task.subtasks.map((st) =>
+              st.id === subtaskId ? { ...st, ...subtask } : st
+            ),
+          } : task
+        ),
+      } : null)
+    } catch (error) {
+      console.error("Error updating subtask:", error)
+      throw error
+    }
+  }
+
+  const handleAddSubtask = async (taskId: string, subtaskText: string) => {
+    if (!project) return
+
+    try {
+      const response = await fetch(`/api/projects/${id}/tasks/${taskId}/subtasks`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          task: subtaskText,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to add subtask")
+      }
+
+      const { subtask } = await response.json()
+      setProject((prev) => prev ? {
+        ...prev,
+        tasks: prev.tasks.map((task) =>
+          task.id === taskId ? {
+            ...task,
+            subtasks: [...task.subtasks, subtask],
+          } : task
+        ),
+      } : null)
+    } catch (error) {
+      console.error("Error adding subtask:", error)
+      throw error
+    }
+  }
+
+  const openEditTaskDialog = (task: Task) => {
+    setSelectedTask(task)
+    setIsTaskDialogOpen(true)
+  }
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center py-12">
@@ -367,9 +541,22 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
         </CustomCard>
       </div>
 
-      <div className="space-y-6">
+      <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-semibold text-gray-900">Tasks</h2>
+        <CustomButton
+          variant="primary"
+          size="sm"
+          icon={<Plus className="h-4 w-4" />}
+          onClick={() => {
+            setSelectedTask(null)
+            setIsTaskDialogOpen(true)
+          }}
+        >
+          Add Task
+        </CustomButton>
+      </div>
 
+      <div className="space-y-6">
         {project.tasks.length === 0 ? (
           <div className="text-center py-8 bg-white rounded-lg border border-gray-200">
             <p className="text-gray-500">No tasks found for this project.</p>
@@ -388,12 +575,18 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
                   </div>
                   <div className="flex-1">
                     <div className="flex justify-between items-start">
-                      <h3
-                        className={`text-lg font-medium ${task.completed ? "line-through text-gray-500" : "text-gray-900"} cursor-pointer`}
-                        onClick={() => toggleTaskCompletion(task.id)}
-                      >
-                        {task.task}
-                      </h3>
+                      <div className="flex-1">
+                        <InlineEdit
+                          value={task.task}
+                          onSave={(newValue) => handleTaskInlineEdit(task.id, newValue)}
+                          className={`text-lg font-medium ${
+                            task.completed ? "line-through text-gray-500" : "text-gray-900"
+                          }`}
+                        />
+                        {task.description && (
+                          <p className="mt-1 text-sm text-gray-500">{task.description}</p>
+                        )}
+                      </div>
                       <div className="flex items-center space-x-2">
                         {task.timeSpent !== undefined && task.timeSpent > 0 && (
                           <div className="flex items-center text-sm text-gray-500 mr-2">
@@ -429,36 +622,55 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
                               <Play className="h-4 w-4" />
                             </button>
                           ))}
+                        <button
+                          className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            openEditTaskDialog(task)
+                          }}
+                          title="Edit task"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
                       </div>
                     </div>
 
-                    {task.subtasks.length > 0 && (
-                      <div className="mt-4 space-y-2">
-                        {task.subtasks.map((subtask) => (
+                    <div className="mt-4 space-y-2">
+                      {task.subtasks.map((subtask) => (
+                        <div
+                          key={subtask.id}
+                          className={`flex items-start gap-3 p-2 rounded-md ${
+                            subtask.completed ? "bg-green-50" : "hover:bg-gray-50"
+                          }`}
+                        >
                           <div
-                            key={subtask.id}
-                            className={`flex items-start gap-3 p-2 rounded-md cursor-pointer ${subtask.completed ? "bg-green-50" : "hover:bg-gray-50"}`}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              toggleSubtaskCompletion(task.id, subtask.id)
-                            }}
+                            className="mt-0.5 cursor-pointer"
+                            onClick={() => toggleSubtaskCompletion(task.id, subtask.id)}
                           >
-                            <div className="mt-0.5">
-                              {subtask.completed ? (
-                                <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
-                              ) : (
-                                <Circle className="h-5 w-5 text-gray-400 flex-shrink-0" />
-                              )}
-                            </div>
-                            <p
-                              className={`text-base ${subtask.completed ? "line-through text-gray-500" : "text-gray-700"}`}
-                            >
-                              {subtask.task}
-                            </p>
+                            {subtask.completed ? (
+                              <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
+                            ) : (
+                              <Circle className="h-5 w-5 text-gray-400 flex-shrink-0" />
+                            )}
                           </div>
-                        ))}
+                          <div className="flex-1">
+                            <InlineEdit
+                              value={subtask.task}
+                              onSave={(newValue) => handleSubtaskEdit(task.id, subtask.id, newValue)}
+                              className={`text-base ${
+                                subtask.completed ? "line-through text-gray-500" : "text-gray-700"
+                              }`}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                      <div className="pl-8">
+                        <SubtaskInput
+                          onAdd={(subtaskText) => handleAddSubtask(task.id, subtaskText)}
+                          placeholder="Add a subtask..."
+                        />
                       </div>
-                    )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -466,6 +678,18 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
           ))
         )}
       </div>
+
+      <TaskDialog
+        isOpen={isTaskDialogOpen}
+        onClose={() => {
+          setIsTaskDialogOpen(false)
+          setSelectedTask(null)
+        }}
+        onSubmit={selectedTask ? handleTaskDialogEdit : handleAddTask}
+        initialData={selectedTask || undefined}
+        mode={selectedTask ? "edit" : "add"}
+        isLoading={isTaskLoading}
+      />
     </div>
   )
 }

@@ -13,13 +13,14 @@ export async function GET(request: Request, { params }: { params: { id: string }
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const unwrappedParams = await Promise.resolve(params)
+    const id = unwrappedParams.id
+
     // Initialize database
     const initialized = await initializeDatabase()
     if (!initialized) {
       return NextResponse.json({ error: "Failed to initialize database" }, { status: 500 })
     }
-
-    const id = params.id
 
     // Get project details and verify ownership
     const projectResult = await query(
