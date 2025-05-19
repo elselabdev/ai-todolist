@@ -4,9 +4,6 @@ FROM node:20-alpine AS builder
 # Set working directory
 WORKDIR /app
 
-# Install Python and other build dependencies
-RUN apk add --no-cache python3 make g++ gcc
-
 # Copy package files
 COPY package.json pnpm-lock.yaml* yarn.lock* package-lock.json* ./
 
@@ -23,6 +20,10 @@ COPY . .
 
 # Set environment variables for production
 ENV NODE_ENV production
+# Add dummy database environment variables to prevent build errors
+ENV POSTGRES_URL="postgres://dummy:dummy@localhost:5432/dummy"
+ENV NEXTAUTH_SECRET="dummy-secret"
+ENV NEXTAUTH_URL="http://localhost:3000"
 
 # Build the Next.js app with standalone output
 RUN npm run build
