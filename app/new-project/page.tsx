@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { CustomButton } from "@/components/ui/custom-button"
 import { CustomTextarea } from "@/components/ui/custom-textarea"
@@ -18,7 +18,7 @@ import { Loader2, Zap, RefreshCw, FileText, ArrowRight } from "lucide-react"
 import Link from "next/link"
 import { projectTemplates } from "@/lib/templates"
 
-export default function NewProject() {
+function NewProjectForm() {
   const [projectName, setProjectName] = useState("")
   const [projectDescription, setProjectDescription] = useState("")
   const [templatePrompt, setTemplatePrompt] = useState<string | null>(null)
@@ -229,5 +229,20 @@ export default function NewProject() {
         </CustomCard>
       </div>
     </div>
+  )
+}
+
+export default function NewProject() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex justify-center items-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          <span className="ml-2 text-gray-600">Loading...</span>
+        </div>
+      }
+    >
+      <NewProjectForm />
+    </Suspense>
   )
 }
