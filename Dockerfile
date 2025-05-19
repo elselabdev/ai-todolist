@@ -59,7 +59,7 @@ COPY start.sh /start.sh
 RUN chmod +x /start.sh
 
 # Set Next.js server port
-ENV PORT 3000
+ENV PORT=3000
 
 # Expose port 80
 EXPOSE 80
