@@ -4,22 +4,31 @@ FROM node:20-alpine AS builder
 # Set working directory
 WORKDIR /app
 
+# Install Python and build dependencies
+RUN apk add --no-cache python3 make g++ gcc git
+
 # Copy package files
 COPY package.json pnpm-lock.yaml* yarn.lock* package-lock.json* ./
 
-# Install dependencies
-RUN \
-  if [ -f yarn.lock ]; then yarn install --frozen-lockfile; \
-  elif [ -f package-lock.json ]; then npm ci; \
-  elif [ -f pnpm-lock.yaml ]; then yarn global add pnpm && pnpm i --frozen-lockfile; \
-  else npm i; \
-  fi
+# Install dependencies with specific handling for native modules
+RUN apk add --no-cache --virtual .build-deps python3 make g++ \
+    && PYTHON=python3 \
+    && if [ -f yarn.lock ]; then \
+         yarn install --frozen-lockfile; \
+       elif [ -f package-lock.json ]; then \
+         npm ci; \
+       elif [ -f pnpm-lock.yaml ]; then \
+         yarn global add pnpm && pnpm i --frozen-lockfile; \
+       else \
+         npm i; \
+       fi \
+    && apk del .build-deps
 
 # Copy all files
 COPY . .
 
 # Set environment variables for production
-ENV NODE_ENV production
+ENV NODE_ENV=production
 # Add dummy database environment variables to prevent build errors
 ENV POSTGRES_URL="postgres://dummy:dummy@localhost:5432/dummy"
 ENV NEXTAUTH_SECRET="dummy-secret"
