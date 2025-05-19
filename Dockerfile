@@ -3,7 +3,7 @@ FROM node:20-alpine AS base
 # Install dependencies only when needed
 FROM base AS deps
 # Install necessary packages for building native modules
-RUN apk add --no-cache libc6-compat python3 make g++
+RUN apk add --no-cache libc6-compat python3 make g++ postgresql-dev
 WORKDIR /app
 
 # Install dependencies based on the preferred package manager
