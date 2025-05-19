@@ -1,68 +1,72 @@
-# Stage 1: Build the Next.js application
-FROM node:20-alpine AS builder
+FROM node:20 AS base
 
-# Set working directory
+# Install dependencies only when needed
+FROM base AS deps
+# Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Install Python and build dependencies
-RUN apk add --no-cache python3 make g++ gcc git
+# Install dependencies based on the preferred package manager
+COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml* ./
+RUN \
+    if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
+    elif [ -f package-lock.json ]; then npm ci; \
+    elif [ -f pnpm-lock.yaml ]; then yarn global add pnpm && pnpm i --frozen-lockfile; \
+    else echo "Lockfile not found." && exit 1; \
+    fi
 
-# Copy package files
-COPY package.json pnpm-lock.yaml* yarn.lock* package-lock.json* ./
 
-# Install dependencies with specific handling for native modules
-RUN apk add --no-cache --virtual .build-deps python3 make g++ \
-    && PYTHON=python3 \
-    && if [ -f yarn.lock ]; then \
-         yarn install --frozen-lockfile; \
-       elif [ -f package-lock.json ]; then \
-         npm ci; \
-       elif [ -f pnpm-lock.yaml ]; then \
-         yarn global add pnpm && pnpm i --frozen-lockfile; \
-       else \
-         npm i; \
-       fi \
-    && apk del .build-deps
-
-# Copy all files
+# Rebuild the source code only when needed
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Set environment variables for production
-ENV NODE_ENV=production
-# Add dummy database environment variables to prevent build errors
-ENV POSTGRES_URL="postgres://dummy:dummy@localhost:5432/dummy"
-ENV NEXTAUTH_SECRET="dummy-secret"
-ENV NEXTAUTH_URL="http://localhost:3000"
+# Next.js collects completely anonymous telemetry data about general usage.
+# Learn more here: https://nextjs.org/telemetry
+# Uncomment the following line in case you want to disable telemetry during the build.
 
-# Build the Next.js app with standalone output
-RUN npm run build
+ENV NEXT_TELEMETRY_DISABLED 1
 
-# Stage 2: Setup Nginx to serve the application
-FROM nginx:alpine
 
-# Install Node.js
-RUN apk add --update nodejs npm
+RUN yarn build
 
-# Remove default nginx static assets
-RUN rm -rf /usr/share/nginx/html/*
+# If using npm comment out above and use below instead
+# RUN npm run build
 
-# Copy built assets from the builder stage
-COPY --from=builder /app/.next/standalone /app
-COPY --from=builder /app/.next/static /app/.next/static
-COPY --from=builder /app/public /app/public
+# Production image, copy all the files and run next
+FROM base AS runner
+WORKDIR /app
 
-# Copy nginx configuration
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+ENV NODE_ENV production
+# Uncomment the following line in case you want to disable telemetry during runtime.
 
-# Copy startup script
-COPY start.sh /start.sh
-RUN chmod +x /start.sh
+ENV NEXT_TELEMETRY_DISABLED 1
 
-# Set Next.js server port
-ENV PORT=3000
 
-# Expose port 80
-EXPOSE 80
 
-# Start Next.js and Nginx
-CMD ["/start.sh"]
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+COPY --from=builder /app/public ./public
+
+# Set the correct permission for prerender cache
+RUN mkdir .next
+RUN chown nextjs:nodejs .next
+
+# Automatically leverage output traces to reduce image size
+# https://nextjs.org/docs/advanced-features/output-file-tracing
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
+
+EXPOSE 3000
+
+ENV PORT 3000
+# set hostname to localhost
+ENV HOSTNAME "0.0.0.0"
+
+# server.js is created by next build from the standalone output
+# https://nextjs.org/docs/pages/api-reference/next-config-js/output
+CMD ["node", "server.js"]
