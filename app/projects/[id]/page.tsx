@@ -9,6 +9,8 @@ import { Loader2, ArrowLeft, Trash2, CheckCircle, Circle, Play, Pause, Clock, Pl
 import { TaskDialog } from "@/components/ui/task-dialog"
 import { InlineEdit } from "@/components/ui/inline-edit"
 import { SubtaskInput } from "@/components/ui/subtask-input"
+import { TaskContextMenu } from "@/components/ui/task-context-menu"
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd"
 
 interface SubTask {
   id: string
@@ -24,6 +26,7 @@ interface Task {
   completed: boolean
   timeSpent?: number
   timeTrackingStarted?: string | null
+  position: number
 }
 
 interface Project {
@@ -48,6 +51,8 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [isTaskLoading, setIsTaskLoading] = useState(false)
   const router = useRouter()
+  const [liveTimers, setLiveTimers] = useState<{ [taskId: string]: number }>({})
+  const [timerInterval, setTimerInterval] = useState<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     const fetchProject = async () => {
@@ -202,13 +207,19 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
     }).format(date)
   }
 
-  const formatTimeSpent = (minutes: number) => {
-    if (minutes < 60) {
-      return `${minutes} min`
+  const formatTimeSpent = (seconds: number) => {
+    if (seconds < 60) {
+      return `${seconds}s`
     }
-    const hours = Math.floor(minutes / 60)
-    const remainingMinutes = minutes % 60
-    return `${hours}h ${remainingMinutes}m`
+    if (seconds < 3600) {
+      const minutes = Math.floor(seconds / 60)
+      const remainingSeconds = seconds % 60
+      return `${minutes}m ${remainingSeconds}s`
+    }
+    const hours = Math.floor(seconds / 3600)
+    const remainingMinutes = Math.floor((seconds % 3600) / 60)
+    const remainingSeconds = seconds % 60
+    return `${hours}h ${remainingMinutes}m ${remainingSeconds}s`
   }
 
   const startTimeTracking = async (taskId: string) => {
@@ -456,6 +467,136 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
     setIsTaskDialogOpen(true)
   }
 
+  const handleDeleteTask = async (taskId: string) => {
+    if (!project) return
+
+    try {
+      const response = await fetch(`/api/projects/${id}/tasks/${taskId}`, {
+        method: "DELETE",
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to delete task")
+      }
+
+      setProject((prev) => prev ? {
+        ...prev,
+        tasks: prev.tasks.filter((task) => task.id !== taskId),
+      } : null)
+    } catch (error) {
+      console.error("Error deleting task:", error)
+      throw error
+    }
+  }
+
+  const handleDeleteSubtask = async (taskId: string, subtaskId: string) => {
+    if (!project) return
+
+    try {
+      const response = await fetch(`/api/projects/${id}/tasks/${taskId}/subtasks/${subtaskId}`, {
+        method: "DELETE",
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to delete subtask")
+      }
+
+      setProject((prev) => prev ? {
+        ...prev,
+        tasks: prev.tasks.map((task) =>
+          task.id === taskId ? {
+            ...task,
+            subtasks: task.subtasks.filter((st) => st.id !== subtaskId),
+          } : task
+        ),
+      } : null)
+    } catch (error) {
+      console.error("Error deleting subtask:", error)
+      throw error
+    }
+  }
+
+  const handleDragEnd = async (result: any) => {
+    if (!result.destination || !project) return
+
+    const { source, destination } = result
+    if (source.index === destination.index) return
+
+    // Reorder tasks array
+    const newTasks = Array.from(project.tasks)
+    const [removed] = newTasks.splice(source.index, 1)
+    newTasks.splice(destination.index, 0, removed)
+
+    // Update positions
+    const updatedTasks = newTasks.map((task, index) => ({
+      ...task,
+      position: index + 1,
+    }))
+
+    // Optimistically update UI
+    setProject((prev) => prev ? { ...prev, tasks: updatedTasks } : null)
+
+    try {
+      // Update task positions in the database
+      const response = await fetch(`/api/projects/${id}/tasks/reorder`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          taskOrders: updatedTasks.map((task) => ({
+            id: task.id,
+            position: task.position,
+          })),
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to reorder tasks")
+      }
+    } catch (error) {
+      console.error("Error reordering tasks:", error)
+      // Revert to original order on error
+      setProject((prev) => prev ? { ...prev, tasks: project.tasks } : null)
+    }
+  }
+
+  // Update live timers every second
+  useEffect(() => {
+    if (!project) return
+
+    // Initialize timers for tasks that are currently being tracked
+    const initialTimers: { [taskId: string]: number } = {}
+    project.tasks.forEach(task => {
+      if (task.timeTrackingStarted) {
+        const startTime = new Date(task.timeTrackingStarted).getTime()
+        const initialSeconds = Math.floor((task.timeSpent || 0) + (Date.now() - startTime) / 1000)
+        initialTimers[task.id] = initialSeconds
+      }
+    })
+    setLiveTimers(initialTimers)
+
+    // Set up interval to update timers
+    const interval = setInterval(() => {
+      setLiveTimers(prev => {
+        const newTimers = { ...prev }
+        project.tasks.forEach(task => {
+          if (task.timeTrackingStarted) {
+            const startTime = new Date(task.timeTrackingStarted).getTime()
+            newTimers[task.id] = Math.floor((task.timeSpent || 0) + (Date.now() - startTime) / 1000)
+          }
+        })
+        return newTimers
+      })
+    }, 1000)
+
+    setTimerInterval(interval)
+
+    return () => {
+      if (interval) clearInterval(interval)
+    }
+  }, [project])
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center py-12">
@@ -556,128 +697,175 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
         </CustomButton>
       </div>
 
-      <div className="space-y-6">
-        {project.tasks.length === 0 ? (
-          <div className="text-center py-8 bg-white rounded-lg border border-gray-200">
-            <p className="text-gray-500">No tasks found for this project.</p>
-          </div>
-        ) : (
-          project.tasks.map((task) => (
-            <CustomCard key={task.id} className="overflow-hidden">
-              <div className={`p-4 ${task.completed ? "bg-green-50" : ""}`}>
-                <div className="flex items-start gap-3">
-                  <div className="mt-1 cursor-pointer" onClick={() => toggleTaskCompletion(task.id)}>
-                    {task.completed ? (
-                      <CheckCircle className="h-6 w-6 text-green-500 flex-shrink-0" />
-                    ) : (
-                      <Circle className="h-6 w-6 text-gray-400 flex-shrink-0" />
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <InlineEdit
-                          value={task.task}
-                          onSave={(newValue) => handleTaskInlineEdit(task.id, newValue)}
-                          className={`text-lg font-medium ${
-                            task.completed ? "line-through text-gray-500" : "text-gray-900"
-                          }`}
-                        />
-                        {task.description && (
-                          <p className="mt-1 text-sm text-gray-500">{task.description}</p>
-                        )}
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        {task.timeSpent !== undefined && task.timeSpent > 0 && (
-                          <div className="flex items-center text-sm text-gray-500 mr-2">
-                            <Clock className="h-4 w-4 mr-1" />
-                            <span>{formatTimeSpent(task.timeSpent)}</span>
-                          </div>
-                        )}
-                        {!task.completed &&
-                          (timeTrackingLoading === task.id ? (
-                            <div className="flex items-center justify-center w-8 h-8">
-                              <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
-                            </div>
-                          ) : task.timeTrackingStarted ? (
-                            <button
-                              className="flex items-center justify-center w-8 h-8 rounded-full bg-red-100 text-red-600 hover:bg-red-200"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                stopTimeTracking(task.id)
-                              }}
-                              title="Stop time tracking"
-                            >
-                              <Pause className="h-4 w-4" />
-                            </button>
-                          ) : (
-                            <button
-                              className="flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-600 hover:bg-green-200"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                startTimeTracking(task.id)
-                              }}
-                              title="Start time tracking"
-                            >
-                              <Play className="h-4 w-4" />
-                            </button>
-                          ))}
-                        <button
-                          className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            openEditTaskDialog(task)
-                          }}
-                          title="Edit task"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 space-y-2">
-                      {task.subtasks.map((subtask) => (
-                        <div
-                          key={subtask.id}
-                          className={`flex items-start gap-3 p-2 rounded-md ${
-                            subtask.completed ? "bg-green-50" : "hover:bg-gray-50"
-                          }`}
-                        >
-                          <div
-                            className="mt-0.5 cursor-pointer"
-                            onClick={() => toggleSubtaskCompletion(task.id, subtask.id)}
-                          >
-                            {subtask.completed ? (
-                              <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
-                            ) : (
-                              <Circle className="h-5 w-5 text-gray-400 flex-shrink-0" />
-                            )}
-                          </div>
-                          <div className="flex-1">
-                            <InlineEdit
-                              value={subtask.task}
-                              onSave={(newValue) => handleSubtaskEdit(task.id, subtask.id, newValue)}
-                              className={`text-base ${
-                                subtask.completed ? "line-through text-gray-500" : "text-gray-700"
-                              }`}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                      <div className="pl-8">
-                        <SubtaskInput
-                          onAdd={(subtaskText) => handleAddSubtask(task.id, subtaskText)}
-                          placeholder="Add a subtask..."
-                        />
-                      </div>
-                    </div>
-                  </div>
+      <DragDropContext onDragEnd={handleDragEnd}>
+        <Droppable droppableId="tasks">
+          {(provided) => (
+            <div
+              ref={provided.innerRef}
+              {...provided.droppableProps}
+              className="space-y-6"
+            >
+              {project.tasks.length === 0 ? (
+                <div className="text-center py-8 bg-white rounded-lg border border-gray-200">
+                  <p className="text-gray-500">No tasks found for this project.</p>
                 </div>
-              </div>
-            </CustomCard>
-          ))
-        )}
-      </div>
+              ) : (
+                project.tasks.map((task, index) => (
+                  <Draggable key={task.id} draggableId={task.id} index={index}>
+                    {(provided, snapshot) => (
+                      <div
+                        ref={provided.innerRef}
+                        {...provided.draggableProps}
+                        {...provided.dragHandleProps}
+                        className={`${snapshot.isDragging ? "opacity-50" : ""}`}
+                      >
+                        <CustomCard className="overflow-hidden">
+                          <div className={`p-4 ${task.completed ? "bg-green-50" : ""}`}>
+                            <div className="flex items-start gap-3">
+                              <button
+                                className="mt-1 flex-shrink-0"
+                                onClick={() => toggleTaskCompletion(task.id)}
+                                title={task.completed ? "Mark as incomplete" : "Mark as complete"}
+                              >
+                                {task.completed ? (
+                                  <CheckCircle className="h-6 w-6 text-green-500" />
+                                ) : (
+                                  <Circle className="h-6 w-6 text-gray-400" />
+                                )}
+                              </button>
+                              <div className="flex-1">
+                                <div className="flex justify-between items-start">
+                                  <div className="flex-1">
+                                    <InlineEdit
+                                      value={task.task}
+                                      onSave={(newValue) => handleTaskInlineEdit(task.id, newValue)}
+                                      className={`text-lg font-medium ${
+                                        task.completed ? "line-through text-gray-500" : "text-gray-900"
+                                      }`}
+                                    />
+                                    {task.description && (
+                                      <p className="mt-1 text-sm text-gray-500">{task.description}</p>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center space-x-2">
+                                    {(task.timeSpent !== undefined || liveTimers[task.id]) && (
+                                      <div className="flex items-center text-sm text-gray-500 mr-2">
+                                        <Clock className="h-4 w-4 mr-1" />
+                                        <span>
+                                          {task.timeTrackingStarted
+                                            ? formatTimeSpent(liveTimers[task.id] || 0)
+                                            : formatTimeSpent(Math.floor((task.timeSpent || 0) / 60))}
+                                        </span>
+                                      </div>
+                                    )}
+                                    {!task.completed &&
+                                      (timeTrackingLoading === task.id ? (
+                                        <div className="flex items-center justify-center w-8 h-8">
+                                          <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+                                        </div>
+                                      ) : task.timeTrackingStarted ? (
+                                        <button
+                                          className="flex items-center justify-center w-8 h-8 rounded-full bg-red-100 text-red-600 hover:bg-red-200"
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            stopTimeTracking(task.id)
+                                          }}
+                                          title="Stop time tracking"
+                                        >
+                                          <Pause className="h-4 w-4" />
+                                        </button>
+                                      ) : (
+                                        <button
+                                          className="flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-600 hover:bg-green-200"
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            startTimeTracking(task.id)
+                                          }}
+                                          title="Start time tracking"
+                                        >
+                                          <Play className="h-4 w-4" />
+                                        </button>
+                                      ))}
+                                    <button
+                                      className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        openEditTaskDialog(task)
+                                      }}
+                                      title="Edit task"
+                                    >
+                                      <Edit2 className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                      className="flex items-center justify-center w-8 h-8 rounded-full bg-red-100 text-red-600 hover:bg-red-200"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        if (window.confirm('Are you sure you want to delete this task?')) {
+                                          handleDeleteTask(task.id)
+                                        }
+                                      }}
+                                      title="Delete task"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div className="mt-4 space-y-2">
+                                  {task.subtasks.map((subtask) => (
+                                    <TaskContextMenu
+                                      key={subtask.id}
+                                      onDelete={() => handleDeleteSubtask(task.id, subtask.id)}
+                                    >
+                                      <div
+                                        className={`flex items-start gap-3 p-2 rounded-md ${
+                                          subtask.completed ? "bg-green-50" : "hover:bg-gray-50"
+                                        }`}
+                                      >
+                                        <button
+                                          className="mt-0.5 flex-shrink-0"
+                                          onClick={() => toggleSubtaskCompletion(task.id, subtask.id)}
+                                          title={subtask.completed ? "Mark as incomplete" : "Mark as complete"}
+                                        >
+                                          {subtask.completed ? (
+                                            <CheckCircle className="h-5 w-5 text-green-500" />
+                                          ) : (
+                                            <Circle className="h-5 w-5 text-gray-400" />
+                                          )}
+                                        </button>
+                                        <div className="flex-1">
+                                          <InlineEdit
+                                            value={subtask.task}
+                                            onSave={(newValue) => handleSubtaskEdit(task.id, subtask.id, newValue)}
+                                            className={`text-base ${
+                                              subtask.completed ? "line-through text-gray-500" : "text-gray-700"
+                                            }`}
+                                          />
+                                        </div>
+                                      </div>
+                                    </TaskContextMenu>
+                                  ))}
+                                  <div className="flex items-start gap-3 p-2">
+                                    <div className="mt-0.5 flex-shrink-0 w-5" /> {/* Spacer for alignment */}
+                                    <div className="flex-1">
+                                      <SubtaskInput onAdd={(subtaskText) => handleAddSubtask(task.id, subtaskText)} />
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </CustomCard>
+                      </div>
+                    )}
+                  </Draggable>
+                ))
+              )}
+              {provided.placeholder}
+            </div>
+          )}
+        </Droppable>
+      </DragDropContext>
 
       <TaskDialog
         isOpen={isTaskDialogOpen}

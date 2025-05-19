@@ -64,7 +64,7 @@ export function InlineEdit({ value, onSave, onCancel, className = "", placeholde
   if (!isEditing) {
     return (
       <div
-        className={`cursor-text ${className}`}
+        className={`cursor-pointer ${className}`}
         onDoubleClick={handleDoubleClick}
       >
         {value || placeholder}

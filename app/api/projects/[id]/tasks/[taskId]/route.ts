@@ -141,3 +141,69 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     return NextResponse.json({ error: "Failed to update task" }, { status: 500 })
   }
 }
+
+export async function DELETE(request: Request, { params }: { params: { id: string; taskId: string } }) {
+  try {
+    const session = (await getServerSession(authOptions)) as CustomSession | null
+
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const initialized = await initializeDatabase()
+    if (!initialized) {
+      return NextResponse.json({ error: "Failed to initialize database" }, { status: 500 })
+    }
+
+    const unwrappedParams = await Promise.resolve(params)
+    const { id, taskId } = unwrappedParams
+    const now = new Date().toISOString()
+
+    // Verify project ownership
+    const projectResult = await query(
+      `
+      SELECT user_id
+      FROM projects
+      WHERE id = $1
+    `,
+      [id],
+    )
+
+    if (projectResult.rows.length === 0) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 })
+    }
+
+    if (projectResult.rows[0].user_id !== session.user.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
+    }
+
+    // Delete task (this will cascade delete subtasks)
+    const result = await query(
+      `
+      DELETE FROM tasks
+      WHERE id = $1 AND project_id = $2
+      RETURNING id
+    `,
+      [taskId, id],
+    )
+
+    if (result.rows.length === 0) {
+      return NextResponse.json({ error: "Task not found" }, { status: 404 })
+    }
+
+    // Update project updated_at timestamp
+    await query(
+      `
+      UPDATE projects
+      SET updated_at = $1
+      WHERE id = $2
+    `,
+      [now, id],
+    )
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error("Database Error:", error)
+    return NextResponse.json({ error: "Failed to delete task" }, { status: 500 })
+  }
+}

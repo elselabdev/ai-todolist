@@ -1,59 +1,34 @@
 import { NextResponse } from "next/server"
+import { initializeDatabase, query } from "@/lib/db"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import { query } from "@/lib/db"
-import type { Session } from "next-auth"
+import { Session } from "next-auth"
+
+interface CustomSession extends Session {
+  user: {
+    id: string
+    email: string
+    name?: string
+  }
+}
 
 // Start time tracking for a task
 export async function POST(request: Request, { params }: { params: { id: string; taskId: string } }) {
   try {
-    // Get the user session
-    const session = (await getServerSession(authOptions)) as Session | null
+    const session = (await getServerSession(authOptions)) as CustomSession | null
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id, taskId } = params
+    const initialized = await initializeDatabase()
+    if (!initialized) {
+      return NextResponse.json({ error: "Failed to initialize database" }, { status: 500 })
+    }
+
+    const unwrappedParams = await Promise.resolve(params)
+    const { id, taskId } = unwrappedParams
     const now = new Date().toISOString()
-
-    // Verify project ownership
-    const projectResult = await query(
-      `
-      SELECT user_id
-      FROM projects
-      WHERE id = $1
-    `,
-      [id],
-    )
-
-    if (projectResult.rows.length === 0) {
-      return NextResponse.json({ error: "Project not found" }, { status: 404 })
-    }
-
-    // Check if the user owns this project
-    if (projectResult.rows[0].user_id !== session.user.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
-    }
-
-    // Check if the task exists
-    const taskResult = await query(
-      `
-      SELECT id, time_tracking_started
-      FROM tasks
-      WHERE id = $1 AND project_id = $2
-    `,
-      [taskId, id],
-    )
-
-    if (taskResult.rows.length === 0) {
-      return NextResponse.json({ error: "Task not found" }, { status: 404 })
-    }
-
-    // Check if time tracking is already started
-    if (taskResult.rows[0].time_tracking_started) {
-      return NextResponse.json({ error: "Time tracking already started for this task" }, { status: 400 })
-    }
 
     // Start time tracking
     await query(
@@ -61,23 +36,13 @@ export async function POST(request: Request, { params }: { params: { id: string;
       UPDATE tasks
       SET 
         time_tracking_started = $1,
-        updated_at = $2
-      WHERE id = $3
+        updated_at = $1
+      WHERE id = $2 AND project_id = $3
     `,
-      [now, now, taskId],
+      [now, taskId, id],
     )
 
-    // Update project updated_at timestamp
-    await query(
-      `
-      UPDATE projects
-      SET updated_at = $1
-      WHERE id = $2
-    `,
-      [now, id],
-    )
-
-    return NextResponse.json({ success: true, timeTrackingStarted: now })
+    return NextResponse.json({ timeTrackingStarted: now })
   } catch (error) {
     console.error("Database Error:", error)
     return NextResponse.json({ error: "Failed to start time tracking" }, { status: 500 })
@@ -87,39 +52,25 @@ export async function POST(request: Request, { params }: { params: { id: string;
 // Stop time tracking for a task
 export async function DELETE(request: Request, { params }: { params: { id: string; taskId: string } }) {
   try {
-    // Get the user session
-    const session = (await getServerSession(authOptions)) as Session | null
+    const session = (await getServerSession(authOptions)) as CustomSession | null
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id, taskId } = params
+    const initialized = await initializeDatabase()
+    if (!initialized) {
+      return NextResponse.json({ error: "Failed to initialize database" }, { status: 500 })
+    }
+
+    const unwrappedParams = await Promise.resolve(params)
+    const { id, taskId } = unwrappedParams
     const now = new Date().toISOString()
 
-    // Verify project ownership
-    const projectResult = await query(
-      `
-      SELECT user_id
-      FROM projects
-      WHERE id = $1
-    `,
-      [id],
-    )
-
-    if (projectResult.rows.length === 0) {
-      return NextResponse.json({ error: "Project not found" }, { status: 404 })
-    }
-
-    // Check if the user owns this project
-    if (projectResult.rows[0].user_id !== session.user.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
-    }
-
-    // Check if the task exists and get time_tracking_started
+    // Get current task state
     const taskResult = await query(
       `
-      SELECT id, time_tracking_started, time_spent
+      SELECT time_spent, time_tracking_started
       FROM tasks
       WHERE id = $1 AND project_id = $2
     `,
@@ -130,49 +81,40 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
       return NextResponse.json({ error: "Task not found" }, { status: 404 })
     }
 
-    // Check if time tracking is started
-    if (!taskResult.rows[0].time_tracking_started) {
-      return NextResponse.json({ error: "Time tracking not started for this task" }, { status: 400 })
-    }
+    const task = taskResult.rows[0]
+    const startTime = new Date(task.time_tracking_started)
+    const endTime = new Date()
+    const sessionTimeInSeconds = Math.floor((endTime.getTime() - startTime.getTime()) / 1000)
+    const totalTimeSpent = (task.time_spent || 0) + sessionTimeInSeconds
 
-    // Calculate time spent in minutes
-    const startTime = new Date(taskResult.rows[0].time_tracking_started).getTime()
-    const endTime = new Date(now).getTime()
-    const timeSpentMinutes = Math.round((endTime - startTime) / (1000 * 60))
-
-    // Get current time_spent
-    const currentTimeSpent = taskResult.rows[0].time_spent || 0
-    const newTimeSpent = currentTimeSpent + timeSpentMinutes
-
-    // Stop time tracking and update time_spent
+    // Update task time
     await query(
       `
       UPDATE tasks
       SET 
-        time_tracking_started = NULL,
         time_spent = $1,
+        time_tracking_started = NULL,
         updated_at = $2
-      WHERE id = $3
+      WHERE id = $3 AND project_id = $4
     `,
-      [newTimeSpent, now, taskId],
+      [totalTimeSpent, now, taskId, id],
     )
 
-    // Update project time_spent and updated_at timestamp
+    // Update project total time
     await query(
       `
       UPDATE projects
       SET 
-        time_spent = time_spent + $1,
+        time_spent = COALESCE(time_spent, 0) + $1,
         updated_at = $2
       WHERE id = $3
     `,
-      [timeSpentMinutes, now, id],
+      [sessionTimeInSeconds, now, id],
     )
 
     return NextResponse.json({
-      success: true,
-      timeSpent: newTimeSpent,
-      sessionTime: timeSpentMinutes,
+      timeSpent: totalTimeSpent,
+      sessionTime: sessionTimeInSeconds,
     })
   } catch (error) {
     console.error("Database Error:", error)

@@ -1,13 +1,21 @@
 import { NextResponse } from "next/server"
-import { v4 as uuidv4 } from "uuid"
-import { query, initializeDatabase } from "@/lib/db"
+import { initializeDatabase, query } from "@/lib/db"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
+import { Session } from "next-auth"
+import { v4 as uuidv4 } from "uuid"
+
+interface CustomSession extends Session {
+  user: {
+    id: string
+    email: string
+    name?: string
+  }
+}
 
 export async function GET() {
   try {
-    // Get the user session
-    const session = await getServerSession(authOptions)
+    const session = (await getServerSession(authOptions)) as CustomSession | null
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -57,68 +65,63 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    // Get the user session
-    const session = await getServerSession(authOptions)
+    const session = (await getServerSession(authOptions)) as CustomSession | null
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Initialize database
     const initialized = await initializeDatabase()
     if (!initialized) {
       return NextResponse.json({ error: "Failed to initialize database" }, { status: 500 })
     }
 
     const { name, description, tasks } = await request.json()
-
-    // Validate input
-    if (!name || !description) {
-      return NextResponse.json({ error: "Name and description are required" }, { status: 400 })
-    }
+    const now = new Date().toISOString()
+    const projectId = uuidv4()
 
     // Create project
-    const projectId = uuidv4()
-    const now = new Date().toISOString()
-
-    await query(
-      `INSERT INTO projects (id, name, description, created_at, updated_at, user_id)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [projectId, name, description, now, now, session.user.id],
+    const projectResult = await query(
+      `
+      INSERT INTO projects (id, user_id, name, description, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $5)
+      RETURNING id, name, description, created_at as "createdAt", updated_at as "updatedAt"
+    `,
+      [projectId, session.user.id, name, description, now],
     )
 
-    // Create tasks and subtasks
+    // Create tasks if provided
     if (tasks && Array.isArray(tasks)) {
-      for (const task of tasks) {
+      for (let i = 0; i < tasks.length; i++) {
+        const task = tasks[i]
         const taskId = uuidv4()
-
         await query(
-          `INSERT INTO tasks (id, project_id, task, completed, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [taskId, projectId, task.task, task.completed, now, now],
+          `
+          INSERT INTO tasks (id, project_id, task, completed, position, created_at, updated_at)
+          VALUES ($1, $2, $3, false, $4, $5, $5)
+        `,
+          [taskId, projectId, task.task, i + 1, now],
         )
 
+        // Create subtasks if provided
         if (task.subtasks && Array.isArray(task.subtasks)) {
-          for (const subtask of task.subtasks) {
+          for (let j = 0; j < task.subtasks.length; j++) {
+            const subtask = task.subtasks[j]
             const subtaskId = uuidv4()
-
             await query(
-              `INSERT INTO subtasks (id, task_id, task, completed, created_at, updated_at)
-               VALUES ($1, $2, $3, $4, $5, $6)`,
-              [subtaskId, taskId, subtask.task, subtask.completed, now, now],
+              `
+              INSERT INTO subtasks (id, task_id, task, completed, created_at, updated_at)
+              VALUES ($1, $2, $3, false, $4, $4)
+            `,
+              [subtaskId, taskId, subtask.task, now],
             )
           }
         }
       }
     }
 
-    return NextResponse.json({
-      id: projectId,
-      name,
-      description,
-      createdAt: now,
-      updatedAt: now,
-    })
+    const project = projectResult.rows[0]
+    return NextResponse.json({ project })
   } catch (error) {
     console.error("Database Error:", error)
     return NextResponse.json({ error: "Failed to create project" }, { status: 500 })

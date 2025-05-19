@@ -2,7 +2,8 @@
 
 import * as React from "react"
 import * as ContextMenuPrimitive from "@radix-ui/react-context-menu"
-import { Check, ChevronRight, Circle } from "lucide-react"
+import { Check, ChevronRight, Circle, Trash2, MoreVertical } from "lucide-react"
+import React, { useEffect, useRef, useState } from "react"
 
 import { cn } from "@/lib/utils"
 
@@ -160,6 +161,91 @@ const ContextMenuShortcut = ({ className, ...props }: React.HTMLAttributes<HTMLS
   return <span className={cn("ml-auto text-xs tracking-widest text-muted-foreground", className)} {...props} />
 }
 ContextMenuShortcut.displayName = "ContextMenuShortcut"
+
+interface ContextMenuProps {
+  onDelete: () => Promise<void>
+  children: React.ReactNode
+}
+
+export function ContextMenu({ onDelete, children }: ContextMenuProps) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [position, setPosition] = useState({ x: 0, y: 0 })
+  const menuRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(event.target as Node) &&
+        triggerRef.current &&
+        !triggerRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false)
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault()
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    setPosition({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    })
+    setIsOpen(true)
+  }
+
+  const handleDelete = async () => {
+    try {
+      await onDelete()
+      setIsOpen(false)
+    } catch (error) {
+      console.error("Failed to delete:", error)
+    }
+  }
+
+  return (
+    <div className="relative" onContextMenu={handleContextMenu}>
+      {children}
+      {isOpen && (
+        <div
+          ref={menuRef}
+          className="absolute z-50 min-w-[160px] bg-white rounded-md shadow-lg border border-gray-200 py-1"
+          style={{
+            left: `${position.x}px`,
+            top: `${position.y}px`,
+          }}
+        >
+          <button
+            onClick={handleDelete}
+            className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete
+          </button>
+        </div>
+      )}
+      <div
+        ref={triggerRef}
+        className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
+      >
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            setIsOpen(!isOpen)
+          }}
+          className="p-1 hover:bg-gray-100 rounded-full"
+        >
+          <MoreVertical className="h-4 w-4 text-gray-500" />
+        </button>
+      </div>
+    </div>
+  )
+}
 
 export {
   ContextMenu,

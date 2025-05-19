@@ -54,6 +54,33 @@ async function runMigration() {
     END $$;
   `)
 
+  // Add position column to tasks table if it doesn't exist
+  await query(`
+    DO $$ 
+    BEGIN 
+      IF NOT EXISTS (
+        SELECT 1 
+        FROM information_schema.columns 
+        WHERE table_name = 'tasks' AND column_name = 'position'
+      ) THEN 
+        ALTER TABLE tasks ADD COLUMN position INTEGER;
+        
+        -- Update existing tasks with position based on created_at
+        WITH numbered_tasks AS (
+          SELECT id, ROW_NUMBER() OVER (PARTITION BY project_id ORDER BY created_at) as row_num
+          FROM tasks
+        )
+        UPDATE tasks t
+        SET position = nt.row_num
+        FROM numbered_tasks nt
+        WHERE t.id = nt.id;
+        
+        -- Make position NOT NULL after setting initial values
+        ALTER TABLE tasks ALTER COLUMN position SET NOT NULL;
+      END IF;
+    END $$;
+  `);
+
   console.log("Database migration completed successfully")
 }
 
