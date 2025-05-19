@@ -4,6 +4,9 @@ FROM node:20-alpine AS builder
 # Set working directory
 WORKDIR /app
 
+# Install Python and other build dependencies
+RUN apk add --no-cache python3 make g++ gcc
+
 # Copy package files
 COPY package.json pnpm-lock.yaml* yarn.lock* package-lock.json* ./
 
