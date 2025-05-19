@@ -206,9 +206,9 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
 
   const startTimeTracking = async (taskId: string) => {
     if (!project) return
-    
+
     setTimeTrackingLoading(taskId)
-    
+
     try {
       const response = await fetch(`/api/projects/${id}/tasks/${taskId}/time-tracking`, {
         method: "POST",
@@ -219,7 +219,7 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
       }
 
       const data = await response.json()
-      
+
       // Update the task in the local state
       const updatedTasks = project.tasks.map((task) => {
         if (task.id === taskId) {
@@ -244,9 +244,9 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
 
   const stopTimeTracking = async (taskId: string) => {
     if (!project) return
-    
+
     setTimeTrackingLoading(taskId)
-    
+
     try {
       const response = await fetch(`/api/projects/${id}/tasks/${taskId}/time-tracking`, {
         method: "DELETE",
@@ -257,7 +257,7 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
       }
 
       const data = await response.json()
-      
+
       // Update the task in the local state
       const updatedTasks = project.tasks.map((task) => {
         if (task.id === taskId) {
@@ -355,7 +355,7 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
             </div>
           </CustomCardHeader>
         </CustomCard>
-        
+
         <CustomCard>
           <CustomCardHeader>
             <CustomCardTitle>Time Spent</CustomCardTitle>
@@ -379,10 +379,7 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
             <CustomCard key={task.id} className="overflow-hidden">
               <div className={`p-4 ${task.completed ? "bg-green-50" : ""}`}>
                 <div className="flex items-start gap-3">
-                  <div 
-                    className="mt-1 cursor-pointer"
-                    onClick={() => toggleTaskCompletion(task.id)}
-                  >
+                  <div className="mt-1 cursor-pointer" onClick={() => toggleTaskCompletion(task.id)}>
                     {task.completed ? (
                       <CheckCircle className="h-6 w-6 text-green-500 flex-shrink-0" />
                     ) : (
@@ -404,8 +401,8 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
                             <span>{formatTimeSpent(task.timeSpent)}</span>
                           </div>
                         )}
-                        {!task.completed && (
-                          timeTrackingLoading === task.id ? (
+                        {!task.completed &&
+                          (timeTrackingLoading === task.id ? (
                             <div className="flex items-center justify-center w-8 h-8">
                               <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
                             </div>
@@ -413,8 +410,8 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
                             <button
                               className="flex items-center justify-center w-8 h-8 rounded-full bg-red-100 text-red-600 hover:bg-red-200"
                               onClick={(e) => {
-                                e.stopPropagation();
-                                stopTimeTracking(task.id);
+                                e.stopPropagation()
+                                stopTimeTracking(task.id)
                               }}
                               title="Stop time tracking"
                             >
@@ -424,15 +421,14 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
                             <button
                               className="flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-600 hover:bg-green-200"
                               onClick={(e) => {
-                                e.stopPropagation();
-                                startTimeTracking(task.id);
+                                e.stopPropagation()
+                                startTimeTracking(task.id)
                               }}
                               title="Start time tracking"
                             >
                               <Play className="h-4 w-4" />
                             </button>
-                          )
-                        )}
+                          ))}
                       </div>
                     </div>
 

@@ -1,13 +1,13 @@
-import { sql } from "@vercel/postgres"
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
+import { query } from "@/lib/db"
 import type { Session } from "next-auth"
 
 export async function GET() {
   try {
     // Get the user session (only admins should be able to run migrations)
-    const session = await getServerSession(authOptions) as Session | null
+    const session = (await getServerSession(authOptions)) as Session | null
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -16,7 +16,7 @@ export async function GET() {
     console.log("Running database migration...")
 
     // Add time_spent column to projects table if it doesn't exist
-    await sql`
+    await query(`
       DO $$
       BEGIN
         IF NOT EXISTS (
@@ -26,10 +26,10 @@ export async function GET() {
           ALTER TABLE projects ADD COLUMN time_spent INTEGER NOT NULL DEFAULT 0;
         END IF;
       END $$;
-    `
+    `)
 
     // Add time tracking columns to tasks table if they don't exist
-    await sql`
+    await query(`
       DO $$
       BEGIN
         IF NOT EXISTS (
@@ -46,7 +46,7 @@ export async function GET() {
           ALTER TABLE tasks ADD COLUMN time_tracking_started TIMESTAMP WITH TIME ZONE NULL;
         END IF;
       END $$;
-    `
+    `)
 
     console.log("Database migration completed successfully")
 

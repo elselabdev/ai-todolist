@@ -11,6 +11,8 @@ export async function POST(req: Request) {
 
     const result = await generateText({
       model: openai("gpt-4o"),
+      apiKey:
+        process.env.OPENAI_API_KEY,
       system: `You are a project management assistant that helps users refine their project descriptions.
       Your task is to improve the user's project description to make it more clear, specific, and structured.
       Add relevant details that would help in breaking down the project into tasks.

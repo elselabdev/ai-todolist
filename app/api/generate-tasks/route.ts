@@ -28,6 +28,8 @@ export async function POST(req: Request) {
 
     const result = await generateObject({
       model: openai("gpt-4o"),
+      apiKey:
+        process.env.OPENAI_API_KEY,
       system: `You are a project management assistant that helps break down projects into manageable tasks.
       Based on the user's project description, create a structured task list with simple, achievable tasks.
       Be specific and practical with your task breakdown.

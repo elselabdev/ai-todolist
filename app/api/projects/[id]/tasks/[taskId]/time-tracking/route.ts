@@ -1,14 +1,14 @@
-import { sql } from "@vercel/postgres"
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
+import { query } from "@/lib/db"
 import type { Session } from "next-auth"
 
 // Start time tracking for a task
 export async function POST(request: Request, { params }: { params: { id: string; taskId: string } }) {
   try {
     // Get the user session
-    const session = await getServerSession(authOptions) as Session | null
+    const session = (await getServerSession(authOptions)) as Session | null
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -18,11 +18,14 @@ export async function POST(request: Request, { params }: { params: { id: string;
     const now = new Date().toISOString()
 
     // Verify project ownership
-    const projectResult = await sql`
+    const projectResult = await query(
+      `
       SELECT user_id
       FROM projects
-      WHERE id = ${id}
-    `
+      WHERE id = $1
+    `,
+      [id],
+    )
 
     if (projectResult.rows.length === 0) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 })
@@ -34,11 +37,14 @@ export async function POST(request: Request, { params }: { params: { id: string;
     }
 
     // Check if the task exists
-    const taskResult = await sql`
+    const taskResult = await query(
+      `
       SELECT id, time_tracking_started
       FROM tasks
-      WHERE id = ${taskId} AND project_id = ${id}
-    `
+      WHERE id = $1 AND project_id = $2
+    `,
+      [taskId, id],
+    )
 
     if (taskResult.rows.length === 0) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 })
@@ -50,20 +56,26 @@ export async function POST(request: Request, { params }: { params: { id: string;
     }
 
     // Start time tracking
-    await sql`
+    await query(
+      `
       UPDATE tasks
       SET 
-        time_tracking_started = ${now},
-        updated_at = ${now}
-      WHERE id = ${taskId}
-    `
+        time_tracking_started = $1,
+        updated_at = $2
+      WHERE id = $3
+    `,
+      [now, now, taskId],
+    )
 
     // Update project updated_at timestamp
-    await sql`
+    await query(
+      `
       UPDATE projects
-      SET updated_at = ${now}
-      WHERE id = ${id}
-    `
+      SET updated_at = $1
+      WHERE id = $2
+    `,
+      [now, id],
+    )
 
     return NextResponse.json({ success: true, timeTrackingStarted: now })
   } catch (error) {
@@ -76,7 +88,7 @@ export async function POST(request: Request, { params }: { params: { id: string;
 export async function DELETE(request: Request, { params }: { params: { id: string; taskId: string } }) {
   try {
     // Get the user session
-    const session = await getServerSession(authOptions) as Session | null
+    const session = (await getServerSession(authOptions)) as Session | null
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -86,11 +98,14 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
     const now = new Date().toISOString()
 
     // Verify project ownership
-    const projectResult = await sql`
+    const projectResult = await query(
+      `
       SELECT user_id
       FROM projects
-      WHERE id = ${id}
-    `
+      WHERE id = $1
+    `,
+      [id],
+    )
 
     if (projectResult.rows.length === 0) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 })
@@ -102,11 +117,14 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
     }
 
     // Check if the task exists and get time_tracking_started
-    const taskResult = await sql`
+    const taskResult = await query(
+      `
       SELECT id, time_tracking_started, time_spent
       FROM tasks
-      WHERE id = ${taskId} AND project_id = ${id}
-    `
+      WHERE id = $1 AND project_id = $2
+    `,
+      [taskId, id],
+    )
 
     if (taskResult.rows.length === 0) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 })
@@ -121,34 +139,40 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
     const startTime = new Date(taskResult.rows[0].time_tracking_started).getTime()
     const endTime = new Date(now).getTime()
     const timeSpentMinutes = Math.round((endTime - startTime) / (1000 * 60))
-    
+
     // Get current time_spent
     const currentTimeSpent = taskResult.rows[0].time_spent || 0
     const newTimeSpent = currentTimeSpent + timeSpentMinutes
 
     // Stop time tracking and update time_spent
-    await sql`
+    await query(
+      `
       UPDATE tasks
       SET 
         time_tracking_started = NULL,
-        time_spent = ${newTimeSpent},
-        updated_at = ${now}
-      WHERE id = ${taskId}
-    `
+        time_spent = $1,
+        updated_at = $2
+      WHERE id = $3
+    `,
+      [newTimeSpent, now, taskId],
+    )
 
     // Update project time_spent and updated_at timestamp
-    await sql`
+    await query(
+      `
       UPDATE projects
       SET 
-        time_spent = time_spent + ${timeSpentMinutes},
-        updated_at = ${now}
-      WHERE id = ${id}
-    `
+        time_spent = time_spent + $1,
+        updated_at = $2
+      WHERE id = $3
+    `,
+      [timeSpentMinutes, now, id],
+    )
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       timeSpent: newTimeSpent,
-      sessionTime: timeSpentMinutes
+      sessionTime: timeSpentMinutes,
     })
   } catch (error) {
     console.error("Database Error:", error)

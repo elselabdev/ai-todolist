@@ -1,6 +1,5 @@
-import { sql } from "@vercel/postgres"
 import { NextResponse } from "next/server"
-import { initializeDatabase } from "@/lib/db"
+import { initializeDatabase, query } from "@/lib/db"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 
@@ -24,11 +23,14 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     const now = new Date().toISOString()
 
     // Verify project ownership
-    const projectResult = await sql`
+    const projectResult = await query(
+      `
       SELECT user_id
       FROM projects
-      WHERE id = ${id}
-    `
+      WHERE id = $1
+    `,
+      [id],
+    )
 
     if (projectResult.rows.length === 0) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 })
@@ -40,14 +42,17 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     }
 
     // Update task
-    const result = await sql`
+    const result = await query(
+      `
       UPDATE tasks
       SET 
-        completed = ${completed},
-        updated_at = ${now}
-      WHERE id = ${taskId} AND project_id = ${id}
+        completed = $1,
+        updated_at = $2
+      WHERE id = $3 AND project_id = $4
       RETURNING id
-    `
+    `,
+      [completed, now, taskId, id],
+    )
 
     if (result.rows.length === 0) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 })
@@ -55,21 +60,27 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
     // If task is marked as completed, mark all subtasks as completed
     if (completed) {
-      await sql`
+      await query(
+        `
         UPDATE subtasks
         SET 
           completed = true,
-          updated_at = ${now}
-        WHERE task_id = ${taskId}
-      `
+          updated_at = $1
+        WHERE task_id = $2
+      `,
+        [now, taskId],
+      )
     }
 
     // Update project updated_at timestamp
-    await sql`
+    await query(
+      `
       UPDATE projects
-      SET updated_at = ${now}
-      WHERE id = ${id}
-    `
+      SET updated_at = $1
+      WHERE id = $2
+    `,
+      [now, id],
+    )
 
     return NextResponse.json({ success: true })
   } catch (error) {

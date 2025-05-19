@@ -1,6 +1,5 @@
-import { sql } from "@vercel/postgres"
 import { NextResponse } from "next/server"
-import { initializeDatabase } from "@/lib/db"
+import { initializeDatabase, query } from "@/lib/db"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import type { Session } from "next-auth"
@@ -8,7 +7,7 @@ import type { Session } from "next-auth"
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
     // Get the user session
-    const session = await getServerSession(authOptions) as Session | null
+    const session = (await getServerSession(authOptions)) as Session | null
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -23,7 +22,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
     const id = params.id
 
     // Get project details and verify ownership
-    const projectResult = await sql`
+    const projectResult = await query(
+      `
       SELECT 
         id, 
         name, 
@@ -33,8 +33,10 @@ export async function GET(request: Request, { params }: { params: { id: string }
         updated_at as "updatedAt",
         user_id as "userId"
       FROM projects
-      WHERE id = ${id}
-    `
+      WHERE id = $1
+    `,
+      [id],
+    )
 
     if (projectResult.rows.length === 0) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 })
@@ -51,7 +53,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
     delete project.userId
 
     // Get tasks
-    const tasksResult = await sql`
+    const tasksResult = await query(
+      `
       SELECT 
         id, 
         task, 
@@ -61,15 +64,18 @@ export async function GET(request: Request, { params }: { params: { id: string }
         created_at as "createdAt", 
         updated_at as "updatedAt"
       FROM tasks
-      WHERE project_id = ${id}
+      WHERE project_id = $1
       ORDER BY created_at ASC
-    `
+    `,
+      [id],
+    )
 
     const tasks = tasksResult.rows
 
     // Get subtasks for each task
     for (const task of tasks) {
-      const subtasksResult = await sql`
+      const subtasksResult = await query(
+        `
         SELECT 
           id, 
           task, 
@@ -77,9 +83,11 @@ export async function GET(request: Request, { params }: { params: { id: string }
           created_at as "createdAt", 
           updated_at as "updatedAt"
         FROM subtasks
-        WHERE task_id = ${task.id}
+        WHERE task_id = $1
         ORDER BY created_at ASC
-      `
+      `,
+        [task.id],
+      )
 
       task.subtasks = subtasksResult.rows
     }
@@ -96,7 +104,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
 export async function DELETE(request: Request, { params }: { params: { id: string } }) {
   try {
     // Get the user session
-    const session = await getServerSession(authOptions) as Session | null
+    const session = (await getServerSession(authOptions)) as Session | null
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -111,11 +119,14 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
     const id = params.id
 
     // Verify ownership before deleting
-    const projectResult = await sql`
+    const projectResult = await query(
+      `
       SELECT user_id
       FROM projects
-      WHERE id = ${id}
-    `
+      WHERE id = $1
+    `,
+      [id],
+    )
 
     if (projectResult.rows.length === 0) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 })
@@ -127,10 +138,13 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
     }
 
     // Delete project (cascading delete will handle tasks and subtasks)
-    await sql`
+    await query(
+      `
       DELETE FROM projects
-      WHERE id = ${id}
-    `
+      WHERE id = $1
+    `,
+      [id],
+    )
 
     return NextResponse.json({ success: true })
   } catch (error) {

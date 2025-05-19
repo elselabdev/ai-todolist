@@ -1,6 +1,5 @@
-import { sql } from "@vercel/postgres"
 import { NextResponse } from "next/server"
-import { initializeDatabase } from "@/lib/db"
+import { initializeDatabase, query } from "@/lib/db"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 
@@ -27,11 +26,14 @@ export async function PATCH(
     const now = new Date().toISOString()
 
     // Verify project ownership
-    const projectResult = await sql`
+    const projectResult = await query(
+      `
       SELECT user_id
       FROM projects
-      WHERE id = ${id}
-    `
+      WHERE id = $1
+    `,
+      [id],
+    )
 
     if (projectResult.rows.length === 0) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 })
@@ -43,43 +45,55 @@ export async function PATCH(
     }
 
     // Update subtask
-    const result = await sql`
+    const result = await query(
+      `
       UPDATE subtasks
       SET 
-        completed = ${completed},
-        updated_at = ${now}
-      WHERE id = ${subtaskId} AND task_id = ${taskId}
+        completed = $1,
+        updated_at = $2
+      WHERE id = $3 AND task_id = $4
       RETURNING id
-    `
+    `,
+      [completed, now, subtaskId, taskId],
+    )
 
     if (result.rows.length === 0) {
       return NextResponse.json({ error: "Subtask not found" }, { status: 404 })
     }
 
     // Check if all subtasks are completed
-    const subtasksResult = await sql`
+    const subtasksResult = await query(
+      `
       SELECT completed
       FROM subtasks
-      WHERE task_id = ${taskId}
-    `
+      WHERE task_id = $1
+    `,
+      [taskId],
+    )
 
     const allSubtasksCompleted = subtasksResult.rows.every((row) => row.completed)
 
     // Update task completion status based on subtasks
-    await sql`
+    await query(
+      `
       UPDATE tasks
       SET 
-        completed = ${allSubtasksCompleted},
-        updated_at = ${now}
-      WHERE id = ${taskId}
-    `
+        completed = $1,
+        updated_at = $2
+      WHERE id = $3
+    `,
+      [allSubtasksCompleted, now, taskId],
+    )
 
     // Update project updated_at timestamp
-    await sql`
+    await query(
+      `
       UPDATE projects
-      SET updated_at = ${now}
-      WHERE id = ${id}
-    `
+      SET updated_at = $1
+      WHERE id = $2
+    `,
+      [now, id],
+    )
 
     return NextResponse.json({ success: true })
   } catch (error) {

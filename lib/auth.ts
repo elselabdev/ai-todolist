@@ -1,27 +1,26 @@
 import type { NextAuthOptions } from "next-auth"
 import GoogleProvider from "next-auth/providers/google"
-import { sql } from "@vercel/postgres"
-import { initializeDatabase } from "./db"
+import { query, initializeDatabase } from "./db"
 
 // Initialize users table if it doesn't exist
 async function initializeUsersTable() {
   try {
     await initializeDatabase()
 
-    const tableCheck = await sql`
+    const tableCheck = await query(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
         WHERE table_schema = 'public'
         AND table_name = 'users'
       );
-    `
+    `)
 
     const usersTableExists = tableCheck.rows[0].exists
 
     if (!usersTableExists) {
       console.log("Creating users table...")
 
-      await sql`
+      await query(`
         CREATE TABLE IF NOT EXISTS users (
           id TEXT PRIMARY KEY,
           name TEXT,
@@ -30,13 +29,20 @@ async function initializeUsersTable() {
           image TEXT,
           created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
-      `
+      `)
 
       // Add user_id column to projects table if it doesn't exist
-      await sql`
-        ALTER TABLE projects 
-        ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES users(id) ON DELETE CASCADE;
-      `
+      await query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_name = 'projects' AND column_name = 'user_id'
+          ) THEN
+            ALTER TABLE projects ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE CASCADE;
+          END IF;
+        END $$;
+      `)
 
       console.log("Users table created successfully")
     }
@@ -54,8 +60,8 @@ initializeUsersTable()
 export const authOptions: NextAuthOptions = {
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID || "",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET
     }),
   ],
   callbacks: {
@@ -63,13 +69,14 @@ export const authOptions: NextAuthOptions = {
       // Create or update user in the database
       if (user.email) {
         try {
-          await sql`
-            INSERT INTO users (id, name, email, image)
-            VALUES (${user.id}, ${user.name}, ${user.email}, ${user.image})
-            ON CONFLICT (email) 
-            DO UPDATE SET name = ${user.name}, image = ${user.image}
-            RETURNING id
-          `
+          const result = await query(
+            `INSERT INTO users (id, name, email, image)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (email) 
+             DO UPDATE SET name = $2, image = $4
+             RETURNING id`,
+            [user.id, user.name, user.email, user.image],
+          )
           return true
         } catch (error) {
           console.error("Error saving user to database:", error)
