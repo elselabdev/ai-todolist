@@ -20,6 +20,26 @@ async function runMigration() {
     END $$;
   `)
 
+  // Add archived and archivedAt columns to projects table if they don't exist
+  await query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT FROM information_schema.columns
+        WHERE table_name = 'projects' AND column_name = 'archived'
+      ) THEN
+        ALTER TABLE projects ADD COLUMN archived BOOLEAN NOT NULL DEFAULT FALSE;
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT FROM information_schema.columns
+        WHERE table_name = 'projects' AND column_name = 'archived_at'
+      ) THEN
+        ALTER TABLE projects ADD COLUMN archived_at TIMESTAMP WITH TIME ZONE NULL;
+      END IF;
+    END $$;
+  `)
+
   // Add time tracking columns to tasks table if they don't exist
   await query(`
     DO $$

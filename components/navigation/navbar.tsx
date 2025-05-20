@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Menu, X, CheckSquare, PlusCircle, Home, FileText, History } from "lucide-react"
+import { Menu, X, CheckSquare, PlusCircle, Home, FileText, History, BarChart3 } from "lucide-react"
 import { UserMenu } from "@/components/auth/user-menu"
 
 export function Navbar() {
@@ -16,6 +16,7 @@ export function Navbar() {
 
   const navItems = [
     { name: "Home", href: "/", icon: <Home className="h-5 w-5" /> },
+    { name: "Dashboard", href: "/dashboard", icon: <BarChart3 className="h-5 w-5" /> },
     { name: "Projects", href: "/projects", icon: <CheckSquare className="h-5 w-5" /> },
     { name: "New Project", href: "/new-project", icon: <PlusCircle className="h-5 w-5" /> },
     { name: "Templates", href: "/templates", icon: <FileText className="h-5 w-5" /> },

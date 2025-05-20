@@ -13,7 +13,7 @@ interface CustomSession extends Session {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = (await getServerSession(authOptions)) as CustomSession | null
 
@@ -26,6 +26,9 @@ export async function GET() {
     if (!initialized) {
       return NextResponse.json({ error: "Failed to initialize database" }, { status: 500 })
     }
+
+    const { searchParams } = new URL(request.url)
+    const showArchived = searchParams.get("archived") === "true"
 
     const result = await query(
       `
@@ -50,10 +53,10 @@ export async function GET() {
           WHERE t.project_id = p.id
         ) as progress
       FROM projects p
-      WHERE p.user_id = $1
+      WHERE p.user_id = $1 AND p.archived = $2
       ORDER BY p.updated_at DESC
     `,
-      [session.user.id],
+      [session.user.id, showArchived],
     )
 
     return NextResponse.json({ projects: result.rows })

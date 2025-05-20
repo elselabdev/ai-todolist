@@ -13,6 +13,24 @@ interface Version {
 
 const versions: Version[] = [
   {
+    version: "0.0.3",
+    date: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
+    title: "Project Management Enhancements & Analysis Dashboard",
+    changes: [
+      "Implemented project archiving and unarchiving functionality.",
+      "Added ability to delete projects permanently.",
+      "Introduced an Analysis Dashboard with key metrics:",
+      "  - Total active and archived projects.",
+      "  - Total completed and pending tasks.",
+      "  - Average project completion time.",
+      "  - Tasks completed per week (last 4 weeks).",
+      "  - Tasks completed per month (last 6 months).",
+      "  - Total time spent on projects and tasks.",
+      "Updated project list to filter by active/archived status.",
+      "Enhanced UI for project management on the projects page."
+    ]
+  },
+  {
     version: "0.0.2",
     date: "May 20, 2024",
     title: "Feature Update & Bug Fixes",

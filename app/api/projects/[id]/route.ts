@@ -153,3 +153,60 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
     return NextResponse.json({ error: "Failed to delete project" }, { status: 500 })
   }
 }
+
+export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+  try {
+    // Get the user session
+    const session = (await getServerSession(authOptions)) as Session | null
+
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Initialize database
+    const initialized = await initializeDatabase()
+    if (!initialized) {
+      return NextResponse.json({ error: "Failed to initialize database" }, { status: 500 })
+    }
+
+    const id = params.id
+    const { archived } = await request.json()
+
+    // Verify ownership before updating
+    const projectResult = await query(
+      `
+      SELECT user_id
+      FROM projects
+      WHERE id = $1
+    `,
+      [id],
+    )
+
+    if (projectResult.rows.length === 0) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 })
+    }
+
+    // Check if the user owns this project
+    if (projectResult.rows[0].user_id !== session.user.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
+    }
+
+    const now = new Date().toISOString()
+    const archivedAt = archived ? now : null
+
+    // Update project archived status
+    await query(
+      `
+      UPDATE projects
+      SET archived = $1, archived_at = $2, updated_at = $3
+      WHERE id = $4
+    `,
+      [archived, archivedAt, now, id],
+    )
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error("Database Error:", error)
+    return NextResponse.json({ error: "Failed to update project" }, { status: 500 })
+  }
+}
