@@ -53,14 +53,21 @@ export async function POST(request: Request, { params }: { params: { id: string 
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
     }
 
+    // Get the next position for this project
+    const positionResult = await query(
+      `SELECT COALESCE(MAX(position), 0) + 1 as next_position FROM tasks WHERE project_id = $1`,
+      [id]
+    )
+    const nextPosition = positionResult.rows[0].next_position
+
     // Add new task
     const result = await query(
       `
-      INSERT INTO tasks (id, project_id, task, description, completed, time_spent, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, false, 0, $5, $5)
-      RETURNING id, task, description, completed, time_spent as "timeSpent", created_at as "createdAt", updated_at as "updatedAt"
+      INSERT INTO tasks (id, project_id, task, description, completed, time_spent, position, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, false, 0, $5, $6, $6)
+      RETURNING id, task, description, completed, time_spent as "timeSpent", position, created_at as "createdAt", updated_at as "updatedAt"
     `,
-      [taskId, id, task, description || null, now],
+      [taskId, id, task, description || null, nextPosition, now],
     )
 
     // Update project updated_at timestamp
@@ -84,4 +91,4 @@ export async function POST(request: Request, { params }: { params: { id: string 
     console.error("Database Error:", error)
     return NextResponse.json({ error: "Failed to add task" }, { status: 500 })
   }
-} 
+}

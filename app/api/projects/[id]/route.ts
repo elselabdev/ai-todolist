@@ -59,14 +59,16 @@ export async function GET(request: Request, { params }: { params: { id: string }
       SELECT 
         id, 
         task, 
+        description,
         completed, 
         time_spent as "timeSpent",
         time_tracking_started as "timeTrackingStarted",
+        position,
         created_at as "createdAt", 
         updated_at as "updatedAt"
       FROM tasks
       WHERE project_id = $1
-      ORDER BY created_at ASC
+      ORDER BY position ASC, created_at ASC
     `,
       [id],
     )

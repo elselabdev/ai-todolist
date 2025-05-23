@@ -95,6 +95,9 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
   const toggleTaskCompletion = async (taskId: string) => {
     if (!project) return
 
+    // Store the original project state for potential revert
+    const originalProject = project
+
     const updatedTasks = project.tasks.map((task) => {
       if (task.id === taskId) {
         const newCompletedState = !task.completed
@@ -110,9 +113,12 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
       return task
     })
 
+    // Preserve the original task order by sorting by position
+    const sortedTasks = updatedTasks.sort((a, b) => (a.position || 0) - (b.position || 0))
+
     setProject({
       ...project,
-      tasks: updatedTasks,
+      tasks: sortedTasks,
     })
 
     try {
@@ -128,12 +134,15 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
     } catch (error) {
       console.error("Error updating task:", error)
       // Revert changes on error
-      setProject(project)
+      setProject(originalProject)
     }
   }
 
   const toggleSubtaskCompletion = async (taskId: string, subtaskId: string) => {
     if (!project) return
+
+    // Store the original project state for potential revert
+    const originalProject = project
 
     const updatedTasks = project.tasks.map((task) => {
       if (task.id === taskId) {
@@ -155,9 +164,12 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
       return task
     })
 
+    // Preserve the original task order by sorting by position
+    const sortedTasks = updatedTasks.sort((a, b) => (a.position || 0) - (b.position || 0))
+
     setProject({
       ...project,
-      tasks: updatedTasks,
+      tasks: sortedTasks,
     })
 
     try {
@@ -173,7 +185,7 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
     } catch (error) {
       console.error("Error updating subtask:", error)
       // Revert changes on error
-      setProject(project)
+      setProject(originalProject)
     }
   }
 

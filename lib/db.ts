@@ -63,9 +63,11 @@ export async function initializeDatabase() {
           id UUID PRIMARY KEY,
           project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
           task TEXT NOT NULL,
+          description TEXT,
           completed BOOLEAN NOT NULL DEFAULT FALSE,
           time_spent INTEGER NOT NULL DEFAULT 0,
           time_tracking_started TIMESTAMP WITH TIME ZONE NULL,
+          position INTEGER NOT NULL DEFAULT 1,
           created_at TIMESTAMP WITH TIME ZONE NOT NULL,
           updated_at TIMESTAMP WITH TIME ZONE NOT NULL
         );
@@ -88,6 +90,63 @@ export async function initializeDatabase() {
       await query(`CREATE INDEX IF NOT EXISTS idx_subtasks_task_id ON subtasks(task_id);`)
 
       console.log("Database tables created successfully")
+    } else {
+      // Tables exist, check for missing columns and add them
+      console.log("Checking for missing columns...")
+      
+      // Add description column to tasks table if it doesn't exist
+      await query(`
+        DO $$ 
+        BEGIN 
+          IF NOT EXISTS (
+            SELECT 1 
+            FROM information_schema.columns 
+            WHERE table_name = 'tasks' AND column_name = 'description'
+          ) THEN 
+            ALTER TABLE tasks ADD COLUMN description TEXT;
+          END IF;
+        END $$;
+      `)
+
+      // Add position column to tasks table if it doesn't exist
+      await query(`
+        DO $$ 
+        BEGIN 
+          IF NOT EXISTS (
+            SELECT 1 
+            FROM information_schema.columns 
+            WHERE table_name = 'tasks' AND column_name = 'position'
+          ) THEN 
+            ALTER TABLE tasks ADD COLUMN position INTEGER;
+            
+            -- Update existing tasks with position based on created_at
+            WITH numbered_tasks AS (
+              SELECT id, ROW_NUMBER() OVER (PARTITION BY project_id ORDER BY created_at) as row_num
+              FROM tasks
+            )
+            UPDATE tasks t
+            SET position = nt.row_num
+            FROM numbered_tasks nt
+            WHERE t.id = nt.id;
+            
+            -- Make position NOT NULL after setting initial values
+            ALTER TABLE tasks ALTER COLUMN position SET NOT NULL;
+          END IF;
+        END $$;
+      `)
+
+      // Ensure all existing tasks have position values (in case some are NULL)
+      await query(`
+        WITH numbered_tasks AS (
+          SELECT id, ROW_NUMBER() OVER (PARTITION BY project_id ORDER BY created_at) as row_num
+          FROM tasks
+          WHERE position IS NULL
+        )
+        UPDATE tasks t
+        SET position = nt.row_num
+        FROM numbered_tasks nt
+        WHERE t.id = nt.id;
+      `)
     }
 
     return true
