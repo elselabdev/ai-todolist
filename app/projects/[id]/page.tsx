@@ -28,6 +28,8 @@ interface Task {
   timeSpent?: number
   timeTrackingStarted?: string | null
   position: number
+  dueDate?: string | null
+  dueTime?: string | null
 }
 
 interface Project {
@@ -233,6 +235,77 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
     const remainingMinutes = Math.floor((seconds % 3600) / 60)
     const remainingSeconds = seconds % 60
     return `${hours}h ${remainingMinutes}m ${remainingSeconds}s`
+  }
+
+  const formatDueDateTime = (dueDate?: string | null, dueTime?: string | null) => {
+    if (!dueDate) return null
+    
+    const date = new Date(dueDate)
+    const today = new Date()
+    const tomorrow = new Date(today)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    
+    let dateStr = ""
+    if (date.toDateString() === today.toDateString()) {
+      dateStr = "Today"
+    } else if (date.toDateString() === tomorrow.toDateString()) {
+      dateStr = "Tomorrow"
+    } else {
+      dateStr = date.toLocaleDateString("en-US", { 
+        month: "short", 
+        day: "numeric",
+        year: date.getFullYear() !== today.getFullYear() ? "numeric" : undefined
+      })
+    }
+    
+    if (dueTime) {
+      const [hours, minutes] = dueTime.split(":")
+      const timeDate = new Date()
+      timeDate.setHours(parseInt(hours), parseInt(minutes))
+      const timeStr = timeDate.toLocaleTimeString("en-US", { 
+        hour: "numeric", 
+        minute: "2-digit",
+        hour12: true 
+      })
+      return `${dateStr} at ${timeStr}`
+    }
+    
+    return dateStr
+  }
+
+  const isDueSoon = (dueDate?: string | null, dueTime?: string | null) => {
+    if (!dueDate) return false
+    
+    const now = new Date()
+    const due = new Date(dueDate)
+    
+    if (dueTime) {
+      const [hours, minutes] = dueTime.split(":")
+      due.setHours(parseInt(hours), parseInt(minutes))
+    } else {
+      due.setHours(23, 59, 59) // End of day if no time specified
+    }
+    
+    const timeDiff = due.getTime() - now.getTime()
+    const hoursDiff = timeDiff / (1000 * 60 * 60)
+    
+    return hoursDiff <= 24 && hoursDiff > 0 // Due within 24 hours
+  }
+
+  const isOverdue = (dueDate?: string | null, dueTime?: string | null) => {
+    if (!dueDate) return false
+    
+    const now = new Date()
+    const due = new Date(dueDate)
+    
+    if (dueTime) {
+      const [hours, minutes] = dueTime.split(":")
+      due.setHours(parseInt(hours), parseInt(minutes))
+    } else {
+      due.setHours(23, 59, 59) // End of day if no time specified
+    }
+    
+    return due.getTime() < now.getTime()
   }
 
   const startTimeTracking = async (taskId: string) => {
@@ -774,6 +847,21 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
                                     />
                                     {task.description && (
                                       <p className="mt-1 text-sm text-gray-500">{task.description}</p>
+                                    )}
+                                    {formatDueDateTime(task.dueDate, task.dueTime) && (
+                                      <div className={`mt-2 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                        task.completed 
+                                          ? "bg-gray-100 text-gray-500"
+                                          : isOverdue(task.dueDate, task.dueTime)
+                                          ? "bg-red-100 text-red-800"
+                                          : isDueSoon(task.dueDate, task.dueTime)
+                                          ? "bg-yellow-100 text-yellow-800"
+                                          : "bg-blue-100 text-blue-800"
+                                      }`}>
+                                        <Clock className="h-3 w-3 mr-1" />
+                                        {isOverdue(task.dueDate, task.dueTime) && !task.completed && "Overdue: "}
+                                        {formatDueDateTime(task.dueDate, task.dueTime)}
+                                      </div>
                                     )}
                                   </div>
                                   <div className="flex items-center space-x-2">

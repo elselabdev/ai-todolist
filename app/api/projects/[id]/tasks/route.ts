@@ -28,7 +28,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
       return NextResponse.json({ error: "Failed to initialize database" }, { status: 500 })
     }
 
-    const { task, description } = await request.json()
+    const { task, description, dueDate, dueTime } = await request.json()
     const unwrappedParams = await Promise.resolve(params)
     const { id } = unwrappedParams
     const now = new Date().toISOString()
@@ -63,11 +63,11 @@ export async function POST(request: Request, { params }: { params: { id: string 
     // Add new task
     const result = await query(
       `
-      INSERT INTO tasks (id, project_id, task, description, completed, time_spent, position, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, false, 0, $5, $6, $6)
-      RETURNING id, task, description, completed, time_spent as "timeSpent", position, created_at as "createdAt", updated_at as "updatedAt"
+      INSERT INTO tasks (id, project_id, task, description, completed, time_spent, position, due_date, due_time, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, false, 0, $5, $6, $7, $8, $8)
+      RETURNING id, task, description, completed, time_spent as "timeSpent", position, due_date as "dueDate", due_time as "dueTime", created_at as "createdAt", updated_at as "updatedAt"
     `,
-      [taskId, id, task, description || null, nextPosition, now],
+      [taskId, id, task, description || null, nextPosition, dueDate || null, dueTime || null, now],
     )
 
     // Update project updated_at timestamp

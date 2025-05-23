@@ -74,6 +74,18 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       paramCount++
     }
 
+    if ('dueDate' in requestData) {
+      updates.push(`due_date = $${paramCount}`)
+      values.push(requestData.dueDate || null)
+      paramCount++
+    }
+
+    if ('dueTime' in requestData) {
+      updates.push(`due_time = $${paramCount}`)
+      values.push(requestData.dueTime || null)
+      paramCount++
+    }
+
     updates.push(`updated_at = $${paramCount}`)
     values.push(now)
 
@@ -86,7 +98,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       UPDATE tasks
       SET ${updates.join(', ')}
       WHERE id = $${paramCount + 1} AND project_id = $${paramCount + 2}
-      RETURNING id, task, description, completed, created_at, updated_at
+      RETURNING id, task, description, completed, due_date as "dueDate", due_time as "dueTime", created_at, updated_at
     `,
       values,
     )

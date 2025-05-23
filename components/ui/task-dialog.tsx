@@ -8,10 +8,12 @@ import { Loader2 } from "lucide-react"
 interface TaskDialogProps {
   isOpen: boolean
   onClose: () => void
-  onSubmit: (data: { task: string; description?: string }) => Promise<void>
+  onSubmit: (data: { task: string; description?: string; dueDate?: string; dueTime?: string }) => Promise<void>
   initialData?: {
     task: string
     description?: string
+    dueDate?: string | null
+    dueTime?: string | null
   }
   mode: "add" | "edit"
   isLoading?: boolean
@@ -20,12 +22,16 @@ interface TaskDialogProps {
 export function TaskDialog({ isOpen, onClose, onSubmit, initialData, mode, isLoading }: TaskDialogProps) {
   const [task, setTask] = React.useState(initialData?.task || "")
   const [description, setDescription] = React.useState(initialData?.description || "")
+  const [dueDate, setDueDate] = React.useState(initialData?.dueDate || "")
+  const [dueTime, setDueTime] = React.useState(initialData?.dueTime || "")
   const [error, setError] = React.useState("")
 
   React.useEffect(() => {
     if (isOpen) {
       setTask(initialData?.task || "")
       setDescription(initialData?.description || "")
+      setDueDate(initialData?.dueDate || "")
+      setDueTime(initialData?.dueTime || "")
       setError("")
     }
   }, [isOpen, initialData])
@@ -40,7 +46,12 @@ export function TaskDialog({ isOpen, onClose, onSubmit, initialData, mode, isLoa
     }
 
     try {
-      await onSubmit({ task: task.trim(), description: description.trim() })
+      await onSubmit({ 
+        task: task.trim(), 
+        description: description.trim(),
+        dueDate: dueDate || undefined,
+        dueTime: dueTime || undefined
+      })
       onClose()
     } catch (err) {
       setError("Failed to save task. Please try again.")
@@ -79,6 +90,32 @@ export function TaskDialog({ isOpen, onClose, onSubmit, initialData, mode, isLoa
                 disabled={isLoading}
               />
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label htmlFor="dueDate" className="text-sm font-medium text-gray-700">
+                  Due Date (optional)
+                </label>
+                <Input
+                  id="dueDate"
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  disabled={isLoading}
+                />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="dueTime" className="text-sm font-medium text-gray-700">
+                  Due Time (optional)
+                </label>
+                <Input
+                  id="dueTime"
+                  type="time"
+                  value={dueTime}
+                  onChange={(e) => setDueTime(e.target.value)}
+                  disabled={isLoading}
+                />
+              </div>
+            </div>
             {error && <p className="text-sm text-red-600">{error}</p>}
           </div>
           <DialogFooter>
@@ -102,4 +139,4 @@ export function TaskDialog({ isOpen, onClose, onSubmit, initialData, mode, isLoa
       </DialogContent>
     </Dialog>
   )
-} 
+}

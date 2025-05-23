@@ -64,6 +64,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
         time_spent as "timeSpent",
         time_tracking_started as "timeTrackingStarted",
         position,
+        due_date as "dueDate",
+        due_time as "dueTime",
         created_at as "createdAt", 
         updated_at as "updatedAt"
       FROM tasks

@@ -68,6 +68,8 @@ export async function initializeDatabase() {
           time_spent INTEGER NOT NULL DEFAULT 0,
           time_tracking_started TIMESTAMP WITH TIME ZONE NULL,
           position INTEGER NOT NULL DEFAULT 1,
+          due_date DATE,
+          due_time TIME,
           created_at TIMESTAMP WITH TIME ZONE NOT NULL,
           updated_at TIMESTAMP WITH TIME ZONE NOT NULL
         );
@@ -131,6 +133,34 @@ export async function initializeDatabase() {
             
             -- Make position NOT NULL after setting initial values
             ALTER TABLE tasks ALTER COLUMN position SET NOT NULL;
+          END IF;
+        END $$;
+      `)
+
+      // Add due_date column to tasks table if it doesn't exist
+      await query(`
+        DO $$ 
+        BEGIN 
+          IF NOT EXISTS (
+            SELECT 1 
+            FROM information_schema.columns 
+            WHERE table_name = 'tasks' AND column_name = 'due_date'
+          ) THEN 
+            ALTER TABLE tasks ADD COLUMN due_date DATE;
+          END IF;
+        END $$;
+      `)
+
+      // Add due_time column to tasks table if it doesn't exist
+      await query(`
+        DO $$ 
+        BEGIN 
+          IF NOT EXISTS (
+            SELECT 1 
+            FROM information_schema.columns 
+            WHERE table_name = 'tasks' AND column_name = 'due_time'
+          ) THEN 
+            ALTER TABLE tasks ADD COLUMN due_time TIME;
           END IF;
         END $$;
       `)
