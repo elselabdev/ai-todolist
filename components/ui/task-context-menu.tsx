@@ -34,6 +34,11 @@ export function TaskContextMenu({ onDelete, children }: TaskContextMenuProps) {
     setIsOpen(true)
   }
 
+  const handleConfirmDelete = async () => {
+    await onDelete()
+    setIsDeleteModalOpen(false)
+  }
+
   return (
     <div className="relative group" onContextMenu={handleContextMenu}>
       {children}
@@ -62,12 +67,12 @@ export function TaskContextMenu({ onDelete, children }: TaskContextMenuProps) {
       <ConfirmModal
         isOpen={isDeleteModalOpen}
         onClose={() => setIsDeleteModalOpen(false)}
-        onConfirm={onDelete}
-        title="Delete Item"
-        description="Are you sure you want to delete this item? This action cannot be undone."
+        onConfirm={handleConfirmDelete}
+        title="Delete Subtask"
+        description="Are you sure you want to delete this subtask? This action cannot be undone."
         confirmText="Delete"
         variant="danger"
       />
     </div>
   )
-} 
+}

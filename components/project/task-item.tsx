@@ -11,6 +11,7 @@ import { formatDueDateTime, isDueSoon, isOverdue } from "@/lib/date-utils"
 
 interface TaskItemProps {
   task: Task
+  projectId: string
   liveTimer?: number
   timeTrackingLoading: string | null
   formatTimeSpent: (seconds: number) => string
@@ -24,10 +25,12 @@ interface TaskItemProps {
   onEditSubtask: (taskId: string, subtaskId: string, newTask: string) => Promise<void>
   onDeleteSubtask: (taskId: string, subtaskId: string) => Promise<void>
   onAddSubtask: (taskId: string, subtaskText: string) => Promise<void>
+  onStateOnlyDeleteSubtask?: (taskId: string, subtaskId: string) => void
 }
 
 export function TaskItem({
   task,
+  projectId,
   liveTimer,
   timeTrackingLoading,
   formatTimeSpent,
@@ -41,6 +44,7 @@ export function TaskItem({
   onEditSubtask,
   onDeleteSubtask,
   onAddSubtask,
+  onStateOnlyDeleteSubtask,
 }: TaskItemProps) {
   return (
     <CustomCard className="overflow-hidden">
@@ -139,9 +143,7 @@ export function TaskItem({
                   className="flex items-center justify-center w-8 h-8 rounded-full bg-red-100 text-red-600 hover:bg-red-200"
                   onClick={(e) => {
                     e.stopPropagation()
-                    if (window.confirm('Are you sure you want to delete this task?')) {
-                      onDelete(task.id)
-                    }
+                    onDelete(task.id)
                   }}
                   title="Delete task"
                 >
@@ -156,9 +158,11 @@ export function TaskItem({
                   key={subtask.id}
                   subtask={subtask}
                   taskId={task.id}
+                  projectId={projectId}
                   onToggleCompletion={onToggleSubtaskCompletion}
                   onEdit={onEditSubtask}
                   onDelete={onDeleteSubtask}
+                  onStateOnlyDelete={onStateOnlyDeleteSubtask}
                 />
               ))}
               <div className="flex items-start gap-3 p-2">

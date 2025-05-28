@@ -9,20 +9,52 @@ import { SubTask } from "@/hooks/use-project-data"
 interface SubtaskItemProps {
   subtask: SubTask
   taskId: string
+  projectId: string
   onToggleCompletion: (taskId: string, subtaskId: string) => Promise<void>
   onEdit: (taskId: string, subtaskId: string, newTask: string) => Promise<void>
   onDelete: (taskId: string, subtaskId: string) => Promise<void>
+  onStateOnlyDelete?: (taskId: string, subtaskId: string) => void
 }
 
 export function SubtaskItem({ 
   subtask, 
   taskId, 
+  projectId,
   onToggleCompletion, 
   onEdit, 
-  onDelete 
+  onDelete,
+  onStateOnlyDelete
 }: SubtaskItemProps) {
+  const handleDirectDelete = async () => {
+    try {
+      const response = await fetch(
+        `/api/projects/${projectId}/tasks/${taskId}/subtasks/${subtask.id}`,
+        { method: "DELETE" }
+      )
+
+      if (!response.ok) {
+        // If it's a 404, the subtask might already be deleted, so don't throw an error
+        if (response.status === 404) {
+          console.warn("Subtask already deleted or not found")
+        } else {
+          throw new Error(`Failed to delete subtask: ${response.status}`)
+        }
+      }
+
+      // Use state-only delete if available, otherwise fall back to page reload
+      if (onStateOnlyDelete) {
+        onStateOnlyDelete(taskId, subtask.id)
+      } else {
+        window.location.reload()
+      }
+    } catch (error) {
+      console.error("Error deleting subtask:", error)
+      // Don't re-throw the error to prevent showing error messages for successful deletions
+    }
+  }
+
   return (
-    <TaskContextMenu onDelete={() => onDelete(taskId, subtask.id)}>
+    <TaskContextMenu onDelete={handleDirectDelete}>
       <div
         className={`flex items-start gap-3 p-2 rounded-md ${
           subtask.completed ? "bg-green-50" : "hover:bg-gray-50"

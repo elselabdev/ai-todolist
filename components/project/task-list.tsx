@@ -5,9 +5,11 @@ import { Plus } from "lucide-react"
 import { CustomButton } from "@/components/ui/custom-button"
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd"
 import { TaskItem } from "./task-item"
-import { Task } from "@/hooks/use-project-data"
+import { AiTaskManager } from "./ai-task-manager"
+import { Task, Project } from "@/hooks/use-project-data"
 
 interface TaskListProps {
+  project: Project
   tasks: Task[]
   liveTimers: { [taskId: string]: number }
   timeTrackingLoading: string | null
@@ -24,9 +26,13 @@ interface TaskListProps {
   onEditSubtask: (taskId: string, subtaskId: string, newTask: string) => Promise<void>
   onDeleteSubtask: (taskId: string, subtaskId: string) => Promise<void>
   onAddSubtask: (taskId: string, subtaskText: string) => Promise<void>
+  onStateOnlyDeleteSubtask?: (taskId: string, subtaskId: string) => void
+  onTasksUpdated: (tasks: Task[]) => void
+  onTasksAdded: (newTasks: Task[]) => void
 }
 
 export function TaskList({
+  project,
   tasks,
   liveTimers,
   timeTrackingLoading,
@@ -43,19 +49,29 @@ export function TaskList({
   onEditSubtask,
   onDeleteSubtask,
   onAddSubtask,
+  onStateOnlyDeleteSubtask,
+  onTasksUpdated,
+  onTasksAdded,
 }: TaskListProps) {
   return (
     <>
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-semibold text-gray-900">Tasks</h2>
-        <CustomButton
-          variant="primary"
-          size="sm"
-          icon={<Plus className="h-4 w-4" />}
-          onClick={onAddTask}
-        >
-          Add Task
-        </CustomButton>
+        <div className="flex gap-2">
+          <AiTaskManager
+            project={project}
+            onTasksUpdated={onTasksUpdated}
+            onTasksAdded={onTasksAdded}
+          />
+          <CustomButton
+            variant="primary"
+            size="sm"
+            icon={<Plus className="h-4 w-4" />}
+            onClick={onAddTask}
+          >
+            Add Task
+          </CustomButton>
+        </div>
       </div>
 
       <DragDropContext onDragEnd={onDragEnd}>
@@ -82,6 +98,7 @@ export function TaskList({
                       >
                         <TaskItem
                           task={task}
+                          projectId={project.id}
                           liveTimer={liveTimers[task.id]}
                           timeTrackingLoading={timeTrackingLoading}
                           formatTimeSpent={formatTimeSpent}
@@ -95,6 +112,7 @@ export function TaskList({
                           onEditSubtask={onEditSubtask}
                           onDeleteSubtask={onDeleteSubtask}
                           onAddSubtask={onAddSubtask}
+                          onStateOnlyDeleteSubtask={onStateOnlyDeleteSubtask}
                         />
                       </div>
                     )}

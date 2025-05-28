@@ -9,7 +9,7 @@ import { ConfirmModal } from "@/components/ui/confirm-modal"
 import { ProjectHeader } from "@/components/project/project-header"
 import { ProjectStats } from "@/components/project/project-stats"
 import { TaskList } from "@/components/project/task-list"
-import { useProjectData } from "@/hooks/use-project-data"
+import { useProjectData, Task } from "@/hooks/use-project-data"
 import { useTimeTracking } from "@/hooks/use-time-tracking"
 import { useTaskOperations } from "@/hooks/use-task-operations"
 
@@ -83,6 +83,42 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
   const handleDeleteSubtask = async (taskId: string, subtaskId: string) => {
     setSelectedTaskForDelete({ taskId, subtaskId })
     setDeleteSubtaskModalOpen(true)
+  }
+
+  // State-only delete function for subtasks (no API call)
+  const handleStateOnlyDeleteSubtask = (taskId: string, subtaskId: string) => {
+    if (!project) return
+
+    setProject((prev) => prev ? {
+      ...prev,
+      tasks: prev.tasks.map((task) =>
+        task.id === taskId
+          ? {
+              ...task,
+              subtasks: task.subtasks.filter((st) => st.id !== subtaskId),
+            }
+          : task
+      ),
+    } : null)
+  }
+
+  // AI task management handlers
+  const handleTasksUpdated = (updatedTasks: Task[]) => {
+    if (project) {
+      setProject({
+        ...project,
+        tasks: updatedTasks,
+      })
+    }
+  }
+
+  const handleTasksAdded = (newTasks: Task[]) => {
+    if (project) {
+      setProject({
+        ...project,
+        tasks: [...project.tasks, ...newTasks],
+      })
+    }
   }
 
   // Wrapper functions to pass setProject to hooks
@@ -191,6 +227,7 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
       />
 
       <TaskList
+        project={project}
         tasks={project.tasks}
         liveTimers={liveTimers}
         timeTrackingLoading={timeTrackingLoading}
@@ -210,6 +247,9 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
         onEditSubtask={wrappedHandleSubtaskEdit}
         onDeleteSubtask={handleDeleteSubtask}
         onAddSubtask={wrappedHandleAddSubtask}
+        onStateOnlyDeleteSubtask={handleStateOnlyDeleteSubtask}
+        onTasksUpdated={handleTasksUpdated}
+        onTasksAdded={handleTasksAdded}
       />
 
       <TaskDialog
