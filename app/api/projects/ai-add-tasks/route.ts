@@ -5,6 +5,25 @@ import { initializeDatabase, query } from "@/lib/db"
 import type { Session } from "next-auth"
 import { v4 as uuidv4 } from "uuid"
 
+// Language mapping for AI prompts
+const languagePrompts = {
+  en: "Please respond in English.",
+  es: "Por favor responde en español.",
+  fr: "Veuillez répondre en français.",
+  de: "Bitte antworten Sie auf Deutsch.",
+  it: "Si prega di rispondere in italiano.",
+  pt: "Por favor, responda em português.",
+  ru: "Пожалуйста, отвечайте на русском языке.",
+  ja: "日本語で回答してください。",
+  ko: "한국어로 답변해 주세요.",
+  zh: "请用中文回答。",
+  ar: "يرجى الرد باللغة العربية.",
+  hi: "कृपया हिंदी में उत्तर दें।",
+  tr: "Lütfen Türkçe yanıtlayın.",
+  nl: "Gelieve in het Nederlands te antwoorden.",
+  sv: "Vänligen svara på svenska."
+}
+
 export async function POST(request: NextRequest) {
   try {
     const session = (await getServerSession(authOptions)) as Session | null
@@ -12,7 +31,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { projectId, projectName, projectDescription, currentTasks, addTasksPrompt } = await request.json()
+    const { 
+      projectId, 
+      projectName, 
+      projectDescription, 
+      currentTasks, 
+      addTasksPrompt,
+      language = "en",
+      aiModel = "gpt-4o"
+    } = await request.json()
 
     if (!projectId || !addTasksPrompt) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
@@ -38,9 +65,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
     }
 
+    // Get language instruction
+    const languageInstruction = languagePrompts[language as keyof typeof languagePrompts] || languagePrompts.en
+
     // Prepare the AI prompt for adding new tasks
     const aiPrompt = `
 You are a project management AI assistant. You need to generate ONE new task based on user requirements while considering the existing project context.
+
+${languageInstruction}
 
 Project: ${projectName}
 Description: ${projectDescription}
@@ -61,17 +93,22 @@ Please generate EXACTLY ONE new task that complements the existing ones. You sho
 3. Generate 3-4 relevant subtasks for the task
 4. Make the task actionable and specific
 5. Ensure the task aligns with the user's request
+6. Use the specified language for all task titles and descriptions
 
 Return a JSON object with a "tasks" array containing ONLY ONE task. The task should have:
-- task (descriptive title)
-- description (optional detailed description)
-- subtasks (array of 3-4 subtask objects with "task" field)
+- task (descriptive title in the specified language)
+- description (optional detailed description in the specified language)
+- subtasks (array of 3-4 subtask objects with "task" field in the specified language)
 - completed (always false for new tasks)
 
-IMPORTANT: Generate exactly ONE task with 3-4 subtasks, not multiple tasks.
+IMPORTANT: Generate exactly ONE task with 3-4 subtasks, not multiple tasks. All content should be in the requested language.
 
 Do not include IDs or other database-specific fields - these will be generated automatically.
 `
+
+    // Validate AI model
+    const validModels = ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4"]
+    const selectedModel = validModels.includes(aiModel) ? aiModel : "gpt-4o"
 
     // Call OpenAI API
     const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -81,11 +118,11 @@ Do not include IDs or other database-specific fields - these will be generated a
         Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: "gpt-4",
+        model: selectedModel,
         messages: [
           {
             role: "system",
-            content: "You are a helpful project management assistant that generates exactly one new task with 3-4 subtasks based on user requirements and project context.",
+            content: `You are a helpful project management assistant that generates exactly one new task with 3-4 subtasks based on user requirements and project context. ${languageInstruction}`,
           },
           {
             role: "user",

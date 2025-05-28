@@ -103,15 +103,6 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
   }
 
   // AI task management handlers
-  const handleTasksUpdated = (updatedTasks: Task[]) => {
-    if (project) {
-      setProject({
-        ...project,
-        tasks: updatedTasks,
-      })
-    }
-  }
-
   const handleTasksAdded = (newTasks: Task[]) => {
     if (project) {
       setProject({
@@ -248,7 +239,6 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
         onDeleteSubtask={handleDeleteSubtask}
         onAddSubtask={wrappedHandleAddSubtask}
         onStateOnlyDeleteSubtask={handleStateOnlyDeleteSubtask}
-        onTasksUpdated={handleTasksUpdated}
         onTasksAdded={handleTasksAdded}
       />
 

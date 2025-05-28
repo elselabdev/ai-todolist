@@ -27,7 +27,6 @@ interface TaskListProps {
   onDeleteSubtask: (taskId: string, subtaskId: string) => Promise<void>
   onAddSubtask: (taskId: string, subtaskText: string) => Promise<void>
   onStateOnlyDeleteSubtask?: (taskId: string, subtaskId: string) => void
-  onTasksUpdated: (tasks: Task[]) => void
   onTasksAdded: (newTasks: Task[]) => void
 }
 
@@ -50,7 +49,6 @@ export function TaskList({
   onDeleteSubtask,
   onAddSubtask,
   onStateOnlyDeleteSubtask,
-  onTasksUpdated,
   onTasksAdded,
 }: TaskListProps) {
   return (
@@ -60,7 +58,6 @@ export function TaskList({
         <div className="flex gap-2">
           <AiTaskManager
             project={project}
-            onTasksUpdated={onTasksUpdated}
             onTasksAdded={onTasksAdded}
           />
           <CustomButton
@@ -88,7 +85,7 @@ export function TaskList({
                 </div>
               ) : (
                 tasks.map((task, index) => (
-                  <Draggable key={task.id} draggableId={task.id} index={index}>
+                  <Draggable key={task.id} draggableId={String(task.id)} index={index}>
                     {(provided, snapshot) => (
                       <div
                         ref={provided.innerRef}

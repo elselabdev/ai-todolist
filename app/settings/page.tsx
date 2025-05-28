@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { CustomButton } from "@/components/ui/custom-button"
 import {
   CustomCard,
@@ -14,15 +14,26 @@ import {
 } from "@/components/ui/custom-card"
 import { CustomInput } from "@/components/ui/custom-input"
 import { CustomTextarea } from "@/components/ui/custom-textarea"
-import { Save, Loader2 } from "lucide-react"
+import { Save, Loader2, Globe, Bot } from "lucide-react"
 
 export default function Settings() {
   const [name, setName] = useState("John Doe")
   const [email, setEmail] = useState("john.doe@example.com")
   const [bio, setBio] = useState("Product manager with 5 years of experience.")
+  const [language, setLanguage] = useState("en")
+  const [aiModel, setAiModel] = useState("gpt-4o")
   const [isLoading, setIsLoading] = useState(false)
   const [success, setSuccess] = useState("")
   const [error, setError] = useState("")
+
+  // Load settings from localStorage on component mount
+  useEffect(() => {
+    const savedLanguage = localStorage.getItem("app-language")
+    const savedAiModel = localStorage.getItem("ai-model")
+    
+    if (savedLanguage) setLanguage(savedLanguage)
+    if (savedAiModel) setAiModel(savedAiModel)
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -36,6 +47,22 @@ export default function Settings() {
       setIsLoading(false)
       setSuccess("Profile updated successfully!")
     }, 1500)
+  }
+
+  const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newLanguage = e.target.value
+    setLanguage(newLanguage)
+    localStorage.setItem("app-language", newLanguage)
+    setSuccess("Language preference saved!")
+    setTimeout(() => setSuccess(""), 3000)
+  }
+
+  const handleAiModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newModel = e.target.value
+    setAiModel(newModel)
+    localStorage.setItem("ai-model", newModel)
+    setSuccess("AI model preference saved!")
+    setTimeout(() => setSuccess(""), 3000)
   }
 
   return (
@@ -92,6 +119,80 @@ export default function Settings() {
               </CustomButton>
             </CustomCardFooter>
           </form>
+        </CustomCard>
+
+        <CustomCard>
+          <CustomCardHeader>
+            <CustomCardTitle className="flex items-center gap-2">
+              <Globe className="h-5 w-5" />
+              Language & AI Preferences
+            </CustomCardTitle>
+            <CustomCardDescription>Configure your language and AI model preferences</CustomCardDescription>
+          </CustomCardHeader>
+
+          <CustomCardContent className="space-y-6">
+            <div>
+              <label htmlFor="language-select" className="block text-sm font-medium text-gray-700 mb-2">
+                Language
+              </label>
+              <select
+                id="language-select"
+                value={language}
+                onChange={handleLanguageChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="en">English</option>
+                <option value="es">Español (Spanish)</option>
+                <option value="fr">Français (French)</option>
+                <option value="de">Deutsch (German)</option>
+                <option value="it">Italiano (Italian)</option>
+                <option value="pt">Português (Portuguese)</option>
+                <option value="ru">Русский (Russian)</option>
+                <option value="ja">日本語 (Japanese)</option>
+                <option value="ko">한국어 (Korean)</option>
+                <option value="zh">中文 (Chinese)</option>
+                <option value="ar">العربية (Arabic)</option>
+                <option value="hi">हिन्दी (Hindi)</option>
+                <option value="tr">Türkçe (Turkish)</option>
+                <option value="nl">Nederlands (Dutch)</option>
+                <option value="sv">Svenska (Swedish)</option>
+              </select>
+              <p className="mt-1 text-sm text-gray-500">
+                Select your preferred language for AI-generated content and task descriptions.
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="ai-model-select" className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                <Bot className="h-4 w-4" />
+                AI Model
+              </label>
+              <select
+                id="ai-model-select"
+                value={aiModel}
+                onChange={handleAiModelChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="gpt-4o">GPT-4o (Latest, Most Capable)</option>
+                <option value="gpt-4o-mini">GPT-4o Mini (Fast, Cost-Effective)</option>
+                <option value="gpt-4-turbo">GPT-4 Turbo (High Performance)</option>
+                <option value="gpt-4">GPT-4 (Standard)</option>
+              </select>
+              <p className="mt-1 text-sm text-gray-500">
+                Choose which AI model to use for task generation. GPT-4o is recommended for best results.
+              </p>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h4 className="font-medium text-blue-900 mb-2">AI Model Comparison</h4>
+              <div className="text-sm text-blue-800 space-y-1">
+                <div><strong>GPT-4o:</strong> Latest model with best reasoning and creativity</div>
+                <div><strong>GPT-4o Mini:</strong> Faster responses, lower cost, good for simple tasks</div>
+                <div><strong>GPT-4 Turbo:</strong> High performance with large context window</div>
+                <div><strong>GPT-4:</strong> Reliable standard model for general use</div>
+              </div>
+            </div>
+          </CustomCardContent>
         </CustomCard>
 
         <CustomCard>

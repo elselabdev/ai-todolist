@@ -13,8 +13,26 @@ interface Version {
 
 const versions: Version[] = [
   {
-    version: "0.0.3",
+    version: "0.0.4",
     date: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
+    title: "AI Task Management Improvements & User Preferences",
+    changes: [
+      "Removed problematic AI re-edit tasks feature that was causing UUID and completion status issues.",
+      "Simplified AI functionality to focus only on adding new tasks, eliminating data corruption risks.",
+      "Added comprehensive language support with 15 languages including English, Spanish, French, German, Italian, Portuguese, Russian, Japanese, Korean, Chinese, Arabic, Hindi, Turkish, Dutch, and Swedish.",
+      "Implemented AI model selection allowing users to choose between GPT-4o, GPT-4o Mini, GPT-4 Turbo, and GPT-4.",
+      "Added Language & AI Preferences section in Settings with detailed model comparison.",
+      "Enhanced AI task generation to respect user's language preference for all generated content.",
+      "Improved AI task generation to use selected AI model for optimal performance based on user needs.",
+      "Fixed drag-and-drop functionality by ensuring draggableId is always a string.",
+      "Enhanced component separation and code organization for better maintainability.",
+      "Added user preference persistence using localStorage for seamless experience.",
+      "Improved AI task manager UI with settings information and better user guidance."
+    ]
+  },
+  {
+    version: "0.0.3",
+    date: "May 25, 2024",
     title: "Project Management Enhancements & Analysis Dashboard",
     changes: [
       "Implemented project archiving and unarchiving functionality.",
@@ -99,4 +117,4 @@ export default function VersionHistory() {
       </div>
     </div>
   )
-} 
+}
